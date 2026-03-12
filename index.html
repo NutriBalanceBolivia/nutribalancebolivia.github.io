@@ -1900,13 +1900,13 @@
                     <div class="marmita-card">
                         <img src="https://i.imgur.com/8k7qQjL.jpeg" 
                              alt="Marmita de Carne" class="marmita-img" id="carneImage">
-                        <div class="marmita-label" id="carneLabel" data-es="Carne Fitness" data-pt="Carne Fitness">Carne Fitness</div>
+                        <div class="marmita-label" id="carneLabel">Carne Fitness</div>
                     </div>
                     
                     <div class="marmita-card">
                         <img src="https://i.imgur.com/3yqWvzD.jpeg" 
                              alt="Marmita de Frango" class="marmita-img" id="frangoImage">
-                        <div class="marmita-label" id="frangoLabel" data-es="Pollo Fitness" data-pt="Frango Fitness">Pollo Fitness</div>
+                        <div class="marmita-label" id="frangoLabel">Pollo Fitness</div>
                     </div>
                     
                     <!-- Frase abaixo das imagens hero -->
@@ -2549,7 +2549,7 @@
                     <div style="margin-top:12px;">
                         <label class="form-label" style="font-size:13px;" data-es="Texto de la leyenda (visible en la foto)" data-pt="Texto da legenda (visível na foto)">Texto da legenda (visível na foto)</label>
                         <input type="text" class="form-input" id="heroCarneLabel" placeholder="Ex: Carne Fitness"
-                               oninput="document.getElementById('carneLabel').textContent = this.value || 'Carne Fitness'"
+                               oninput="document.getElementById('carneLabel').textContent = this.value"
                                style="margin-top:4px;">
                     </div>
                 </div>
@@ -2573,7 +2573,7 @@
                     <div style="margin-top:12px;">
                         <label class="form-label" style="font-size:13px;" data-es="Texto de la leyenda (visible en la foto)" data-pt="Texto da legenda (visível na foto)">Texto da legenda (visível na foto)</label>
                         <input type="text" class="form-input" id="heroFrangoLabel" placeholder="Ex: Frango Fitness"
-                               oninput="document.getElementById('frangoLabel').textContent = this.value || 'Frango Fitness'"
+                               oninput="document.getElementById('frangoLabel').textContent = this.value"
                                style="margin-top:4px;">
                     </div>
                 </div>
@@ -3136,8 +3136,8 @@
                 heroImages: {
                     carne: 'https://i.imgur.com/8k7qQjL.jpeg',
                     frango: 'https://i.imgur.com/3yqWvzD.jpeg',
-                    carneText: 'Carne Fitness',
-                    frangoText: 'Pollo Fitness'
+                    carneLabel: 'Carne Fitness',
+                    frangoLabel: 'Pollo Fitness'
                 },
                 heroPhrase: {
                     es: 'Comida saludable entregada en 24h',
@@ -4447,13 +4447,13 @@
                     
                     if (carneLabelEl) {
                         const txt = settings.heroImages.carneLabel;
-                        carneLabelEl.textContent = (txt && txt.trim() !== '') ? txt : 'Carne Fitness';
+                        carneLabelEl.textContent = (txt !== undefined) ? txt : 'Carne Fitness';
                         carneLabelEl.style.display = 'block';
                     }
                     
                     if (frangoLabelEl) {
                         const txt = settings.heroImages.frangoLabel;
-                        frangoLabelEl.textContent = (txt && txt.trim() !== '') ? txt : 'Frango Fitness';
+                        frangoLabelEl.textContent = (txt !== undefined) ? txt : 'Pollo Fitness';
                         frangoLabelEl.style.display = 'block';
                     }
                 }
@@ -4764,8 +4764,8 @@
                     // Atualiza legendas no hero imediatamente
                     const carneLabelEl = document.getElementById('carneLabel');
                     const frangoLabelEl = document.getElementById('frangoLabel');
-                    if (carneLabelEl) carneLabelEl.textContent = carneLabelText || 'Carne Fitness';
-                    if (frangoLabelEl) frangoLabelEl.textContent = frangoLabelText || 'Frango Fitness';
+                    if (carneLabelEl) carneLabelEl.textContent = carneLabelText;
+                    if (frangoLabelEl) frangoLabelEl.textContent = frangoLabelText;
                     
                     showNotification(currentLanguage === 'es' 
                         ? '✅ Imágenes guardadas correctamente' 
