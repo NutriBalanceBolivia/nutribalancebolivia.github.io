@@ -11,6 +11,7 @@
     <!-- ===== FIREBASE SDK ===== -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     
     <style>
         /* ===== VARIÁVEIS & RESET ===== */
@@ -1842,7 +1843,7 @@
     </div>
 
     <!-- ===== STATUS DO BANCO DE DADOS ===== -->
-    <div class="db-status" id="dbStatus">IndexedDB: Inicializando...</div>
+    <div class="db-status" id="dbStatus">🔥 Firebase: Conectando...</div>
 
     <!-- ===== DEBUG TOOLS (Só aparece em localhost) ===== -->
     <div class="debug-tools" id="debugTools">
@@ -2334,12 +2335,12 @@
             <div class="login-form" id="adminLogin">
                 <div class="form-group">
                     <label class="form-label" data-es="Usuario Admin" data-pt="Usuário Admin">Usuario Admin</label>
-                    <input type="text" class="form-input" id="adminUser" placeholder="1">
+                    <input type="text" class="form-input" id="adminUser" placeholder="gladz">
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label" data-es="Contraseña" data-pt="Senha">Contraseña</label>
-                    <input type="password" class="form-input" id="adminPassword" placeholder="1">
+                    <input type="password" class="form-input" id="adminPassword" placeholder="gladz123">
                 </div>
                 
                 <p class="login-error" id="adminError"></p>
@@ -2767,13 +2768,15 @@
 
         let firebaseApp = null;
         let firebaseStorage = null;
+        let firestoreDB = null;
 
         try {
             firebaseApp = firebase.initializeApp(firebaseConfig);
             firebaseStorage = firebase.storage();
-            console.log('🔥 Firebase Storage conectado com sucesso!');
+            firestoreDB = firebase.firestore();
+            console.log('🔥 Firebase Storage + Firestore conectados com sucesso!');
         } catch (e) {
-            console.warn('⚠️ Firebase não disponível, usando base64 local:', e.message);
+            console.warn('⚠️ Firebase não disponível:', e.message);
         }
 
         // Faz upload de um File para o Firebase Storage e retorna a URL pública
@@ -2801,11 +2804,8 @@
         let currentLanguage = 'es';
         let cart = [];
         let currentUser = null;
-        let db = null;
+        let db = null; // mantido por compatibilidade, não usado
         
-        // Constantes para o IndexedDB
-        const DB_NAME = 'NutriBalanceDB';
-        const DB_VERSION = 3;
         const STORES = {
             SETTINGS: 'settings',
             PRODUCTS: 'products',
@@ -2858,106 +2858,24 @@
             }
         }
 
-        // ===== INDEXEDDB FUNCTIONS =====
-        function initDatabase() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(DB_NAME, DB_VERSION);
-                
-                request.onerror = (event) => {
-                    console.error('❌ Erro ao abrir banco de dados:', event.target.error);
-                    updateDBStatus('❌ Banco de dados offline - usando localStorage');
-                    
-                    initLocalStorageFallback();
-                    resolve(false);
-                };
-                
-                request.onsuccess = (event) => {
-                    db = event.target.result;
-                    console.log('✅ Banco de dados IndexedDB aberto com sucesso');
-                    updateDBStatus('✅ Banco de dados conectado');
-                    
-                    setTimeout(() => {
-                        checkInitialData().then(() => {
-                            loadInitialData();
-                            resolve(true);
-                        }).catch(error => {
-                            console.error('❌ Erro ao verificar dados iniciais:', error);
-                            initLocalStorageFallback();
-                            loadInitialData();
-                            resolve(true);
-                        });
-                    }, 100);
-                };
-                
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    console.log('🔄 Atualizando banco de dados para versão:', DB_VERSION);
-                    
-                    if (!db.objectStoreNames.contains(STORES.SETTINGS)) {
-                        const settingsStore = db.createObjectStore(STORES.SETTINGS, { keyPath: 'id' });
-                        settingsStore.createIndex('by_key', 'key', { unique: true });
-                    }
-                    
-                    if (!db.objectStoreNames.contains(STORES.PRODUCTS)) {
-                        const productsStore = db.createObjectStore(STORES.PRODUCTS, { keyPath: 'id' });
-                        productsStore.createIndex('by_type', 'type', { unique: false });
-                        productsStore.createIndex('by_category', 'category', { unique: false });
-                    }
-                    
-                    if (!db.objectStoreNames.contains(STORES.COMBOS)) {
-                        const combosStore = db.createObjectStore(STORES.COMBOS, { keyPath: 'id' });
-                        combosStore.createIndex('by_type', 'type', { unique: false });
-                    }
-                    
-                    if (!db.objectStoreNames.contains(STORES.CLIENTS)) {
-                        const clientsStore = db.createObjectStore(STORES.CLIENTS, { keyPath: 'id', autoIncrement: true });
-                        clientsStore.createIndex('by_email', 'email', { unique: true });
-                        clientsStore.createIndex('by_phone', 'phone', { unique: false });
-                    }
-                    
-                    if (!db.objectStoreNames.contains(STORES.ORDERS)) {
-                        const ordersStore = db.createObjectStore(STORES.ORDERS, { keyPath: 'id', autoIncrement: true });
-                        ordersStore.createIndex('by_client', 'clientId', { unique: false });
-                        ordersStore.createIndex('by_date', 'date', { unique: false });
-                    }
-                    
-                    if (!db.objectStoreNames.contains(STORES.CART)) {
-                        const cartStore = db.createObjectStore(STORES.CART, { keyPath: 'id' });
-                        cartStore.createIndex('by_type', 'type', { unique: false });
-                    }
-                    
-                    if (!db.objectStoreNames.contains(STORES.USERS)) {
-                        const usersStore = db.createObjectStore(STORES.USERS, { keyPath: 'id' });
-                        usersStore.createIndex('by_email', 'email', { unique: true });
-                    }
-                    
-                    console.log('📁 Estrutura do banco de dados criada/atualizada');
-                };
-            });
-        }
-
-        function initLocalStorageFallback() {
-            console.log('🔄 Usando localStorage como fallback');
-            
-            const savedCart = localStorage.getItem('nutribalance_cart');
-            if (savedCart) {
-                try {
-                    cart = JSON.parse(savedCart);
-                    updateCartUI();
-                } catch (e) {
-                    console.error('❌ Erro ao carregar carrinho do localStorage:', e);
-                }
-            }
-            
-            const savedUser = localStorage.getItem('nutribalance_user');
-            if (savedUser) {
-                try {
-                    currentUser = JSON.parse(savedUser);
-                    updateUserInterface();
-                } catch (e) {
-                    console.error('❌ Erro ao carregar usuário do localStorage:', e);
-                    localStorage.removeItem('nutribalance_user');
-                }
+        // ===== FIREBASE FIRESTORE FUNCTIONS =====
+        async function initDatabase() {
+            try {
+                updateDBStatus('🔥 Conectando ao Firebase...');
+                if (!firestoreDB) throw new Error('Firestore não inicializado');
+                // Testa conexão
+                await firestoreDB.collection(STORES.SETTINGS).doc('ping_test').get();
+                updateDBStatus('🔥 Firebase Firestore conectado');
+                console.log('✅ Firebase Firestore conectado com sucesso!');
+                await checkInitialData();
+                await loadInitialData();
+                return true;
+            } catch (error) {
+                console.error('❌ Erro ao conectar ao Firebase:', error);
+                updateDBStatus('❌ Erro Firebase: ' + error.message);
+                // Tenta carregar dados mesmo assim
+                await loadInitialData();
+                return false;
             }
         }
 
@@ -2968,186 +2886,82 @@
             }
         }
 
-        // ===== OPERAÇÕES DO BANCO DE DADOS =====
-        function dbGetAll(storeName) {
-            return new Promise((resolve, reject) => {
-                if (!db) {
-                    const key = `nutribalance_${storeName}`;
-                    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                    resolve(existing);
-                    return;
-                }
-                
-                try {
-                    const transaction = db.transaction([storeName], 'readonly');
-                    const store = transaction.objectStore(storeName);
-                    const request = store.getAll();
-                    
-                    request.onsuccess = () => resolve(request.result || []);
-                    request.onerror = () => {
-                        console.error(`❌ Erro ao buscar dados de ${storeName}:`, request.error);
-                        const key = `nutribalance_${storeName}`;
-                        const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                        resolve(existing);
-                    };
-                } catch (error) {
-                    console.error(`❌ Erro na transação com ${storeName}:`, error);
-                    resolve([]);
-                }
-            });
+        // ===== OPERAÇÕES DO BANCO DE DADOS (FIRESTORE) =====
+        async function dbGetAll(storeName) {
+            try {
+                const snapshot = await firestoreDB.collection(storeName).get();
+                return snapshot.docs.map(doc => doc.data());
+            } catch (error) {
+                console.error(`❌ Erro ao buscar dados de ${storeName}:`, error);
+                return [];
+            }
         }
 
-        function dbAdd(storeName, data) {
-            return new Promise((resolve, reject) => {
-                if (!db) {
-                    const key = `nutribalance_${storeName}`;
-                    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                    existing.push(data);
-                    localStorage.setItem(key, JSON.stringify(existing));
-                    resolve(data);
-                    return;
+        async function dbAdd(storeName, data) {
+            try {
+                if (data.id === undefined || data.id === null) {
+                    const docRef = await firestoreDB.collection(storeName).add(data);
+                    const newData = { ...data, id: docRef.id };
+                    await firestoreDB.collection(storeName).doc(docRef.id).set(newData);
+                    return newData;
+                } else {
+                    await firestoreDB.collection(storeName).doc(String(data.id)).set(data);
+                    return data;
                 }
-                
-                try {
-                    const transaction = db.transaction([storeName], 'readwrite');
-                    const store = transaction.objectStore(storeName);
-                    const request = store.add(data);
-                    
-                    request.onsuccess = () => resolve({ ...data, id: request.result });
-                    request.onerror = () => {
-                        console.error(`❌ Erro ao adicionar em ${storeName}:`, request.error);
-                        reject(request.error);
-                    };
-                } catch (error) {
-                    console.error(`❌ Erro na transação com ${storeName}:`, error);
-                    reject(error);
-                }
-            });
+            } catch (error) {
+                console.error(`❌ Erro ao adicionar em ${storeName}:`, error);
+                throw error;
+            }
         }
 
-        function dbPut(storeName, data) {
-            return new Promise((resolve, reject) => {
-                if (!db) {
-                    const key = `nutribalance_${storeName}`;
-                    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                    const index = existing.findIndex(item => item.id === data.id);
-                    if (index !== -1) {
-                        existing[index] = data;
-                    } else {
-                        existing.push(data);
-                    }
-                    localStorage.setItem(key, JSON.stringify(existing));
-                    resolve(data);
-                    return;
-                }
-                
-                try {
-                    const transaction = db.transaction([storeName], 'readwrite');
-                    const store = transaction.objectStore(storeName);
-                    const request = store.put(data);
-                    
-                    request.onsuccess = () => resolve(data);
-                    request.onerror = () => {
-                        console.error(`❌ Erro ao atualizar em ${storeName}:`, request.error);
-                        reject(request.error);
-                    };
-                } catch (error) {
-                    console.error(`❌ Erro na transação com ${storeName}:`, error);
-                    reject(error);
-                }
-            });
+        async function dbPut(storeName, data) {
+            try {
+                const docId = data.id !== undefined && data.id !== null ? String(data.id) : firestoreDB.collection(storeName).doc().id;
+                const dataToSave = { ...data, id: docId };
+                await firestoreDB.collection(storeName).doc(docId).set(dataToSave, { merge: true });
+                return dataToSave;
+            } catch (error) {
+                console.error(`❌ Erro ao salvar em ${storeName}:`, error);
+                throw error;
+            }
         }
 
-        function dbDelete(storeName, id) {
-            return new Promise((resolve, reject) => {
-                if (!db) {
-                    const key = `nutribalance_${storeName}`;
-                    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                    const filtered = existing.filter(item => item.id !== id);
-                    localStorage.setItem(key, JSON.stringify(filtered));
-                    resolve(true);
-                    return;
-                }
-                
-                try {
-                    const transaction = db.transaction([storeName], 'readwrite');
-                    const store = transaction.objectStore(storeName);
-                    const request = store.delete(id);
-                    
-                    request.onsuccess = () => resolve(true);
-                    request.onerror = () => {
-                        console.error(`❌ Erro ao deletar de ${storeName}:`, request.error);
-                        reject(request.error);
-                    };
-                } catch (error) {
-                    console.error(`❌ Erro na transação com ${storeName}:`, error);
-                    reject(error);
-                }
-            });
+        async function dbDelete(storeName, id) {
+            try {
+                await firestoreDB.collection(storeName).doc(String(id)).delete();
+                return true;
+            } catch (error) {
+                console.error(`❌ Erro ao deletar de ${storeName}:`, error);
+                throw error;
+            }
         }
 
-        function dbGet(storeName, id) {
-            return new Promise((resolve, reject) => {
-                if (!db) {
-                    const key = `nutribalance_${storeName}`;
-                    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                    const item = existing.find(item => item.id === id);
-                    resolve(item || null);
-                    return;
-                }
-                
-                try {
-                    const transaction = db.transaction([storeName], 'readonly');
-                    const store = transaction.objectStore(storeName);
-                    const request = store.get(id);
-                    
-                    request.onsuccess = () => resolve(request.result || null);
-                    request.onerror = () => {
-                        console.error(`❌ Erro ao buscar de ${storeName}:`, request.error);
-                        resolve(null);
-                    };
-                } catch (error) {
-                    console.error(`❌ Erro na transação com ${storeName}:`, error);
-                    resolve(null);
-                }
-            });
+        async function dbGet(storeName, id) {
+            try {
+                const doc = await firestoreDB.collection(storeName).doc(String(id)).get();
+                return doc.exists ? doc.data() : null;
+            } catch (error) {
+                console.error(`❌ Erro ao buscar ${id} de ${storeName}:`, error);
+                return null;
+            }
         }
 
-        function dbGetByIndex(storeName, indexName, value) {
-            // Mapa de nomes de índice para campos reais dos objetos
+        async function dbGetByIndex(storeName, indexName, value) {
             const indexToField = {
                 'by_email': 'email',
                 'by_client': 'clientId',
                 'by_date': 'date',
                 'by_type': 'type'
             };
-
-            return new Promise((resolve, reject) => {
-                if (!db) {
-                    const key = `nutribalance_${storeName}`;
-                    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                    const fieldName = indexToField[indexName] || indexName;
-                    const item = existing.find(item => item[fieldName] === value);
-                    resolve(item || null);
-                    return;
-                }
-                
-                try {
-                    const transaction = db.transaction([storeName], 'readonly');
-                    const store = transaction.objectStore(storeName);
-                    const index = store.index(indexName);
-                    const request = index.get(value);
-                    
-                    request.onsuccess = () => resolve(request.result || null);
-                    request.onerror = () => {
-                        console.error(`❌ Erro ao buscar por índice em ${storeName}:`, request.error);
-                        resolve(null);
-                    };
-                } catch (error) {
-                    console.error(`❌ Erro na transação com ${storeName}:`, error);
-                    resolve(null);
-                }
-            });
+            try {
+                const fieldName = indexToField[indexName] || indexName;
+                const snapshot = await firestoreDB.collection(storeName).where(fieldName, '==', value).limit(1).get();
+                if (snapshot.empty) return null;
+                return snapshot.docs[0].data();
+            } catch (error) {
+                console.error(`❌ Erro ao buscar por índice em ${storeName}:`, error);
+                return null;
+            }
         }
 
         // ===== DADOS INICIAIS =====
@@ -5418,7 +5232,7 @@
                     orders: orders,
                     users: users,
                     exportDate: new Date().toISOString(),
-                    version: DB_VERSION
+                    version: '3-firestore'
                 };
                 
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -5646,4 +5460,11 @@
         }
 
         function closeMobileMenu() {
- 
+            document.getElementById('mobileNavMenu').classList.remove('open');
+            document.getElementById('mobileNavOverlay').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+    </script>
+</body>
+</html>
