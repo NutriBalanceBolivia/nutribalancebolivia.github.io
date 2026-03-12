@@ -2764,22 +2764,43 @@
         // Faz upload de um File para o Firebase Storage e retorna a URL pública
         async function uploadToFirebase(file, folder = 'images') {
             if (!firebaseStorage) {
-                // Fallback: converte para base64 local
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = e => resolve(e.target.result);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
+                throw new Error('Firebase Storage não disponível. Verifique a conexão e tente novamente.');
             }
+
+            // Comprime a imagem antes de enviar (reduz tamanho drasticamente)
+            const compressedFile = await compressImage(file, 800, 0.82);
 
             const ext = file.name.split('.').pop();
             const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substr(2, 8)}.${ext}`;
             const storageRef = firebaseStorage.ref(fileName);
 
-            const snapshot = await storageRef.put(file);
+            const snapshot = await storageRef.put(compressedFile);
             const downloadURL = await snapshot.ref.getDownloadURL();
             return downloadURL;
+        }
+
+        // Comprime imagem antes do upload (evita estouro de localStorage e Firestore)
+        function compressImage(file, maxWidth = 800, quality = 0.82) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let { width, height } = img;
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', quality);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
         }
 
         // ===== CONFIGURAÇÃO INICIAL =====
@@ -2853,7 +2874,31 @@
         }
 
         function lsSave(storeName, items) {
-            localStorage.setItem(lsKey(storeName), JSON.stringify(items));
+            try {
+                // Remove base64 gigante antes de salvar (imagens devem ser URLs do Firebase)
+                const safe = items.map(item => {
+                    if (!item) return item;
+                    const clone = { ...item };
+                    ['imageUrl', 'carne', 'frango'].forEach(key => {
+                        if (typeof clone[key] === 'string' && clone[key].startsWith('data:')) {
+                            clone[key] = ''; // descarta base64, mantém só URLs externas
+                        }
+                    });
+                    // Limpa base64 aninhado em heroImages
+                    if (clone.heroImages) {
+                        clone.heroImages = { ...clone.heroImages };
+                        ['carne', 'frango'].forEach(key => {
+                            if (typeof clone.heroImages[key] === 'string' && clone.heroImages[key].startsWith('data:')) {
+                                clone.heroImages[key] = '';
+                            }
+                        });
+                    }
+                    return clone;
+                });
+                localStorage.setItem(lsKey(storeName), JSON.stringify(safe));
+            } catch(e) {
+                console.warn(`⚠️ localStorage cheio ao salvar "${storeName}":`, e.message);
+            }
         }
 
         async function initDatabase() {
@@ -3034,21 +3079,28 @@
         // ===== DADOS INICIAIS =====
         async function checkInitialData() {
             try {
-                const products = await dbGetAll(STORES.PRODUCTS);
-                const combos = await dbGetAll(STORES.COMBOS);
-                
-                if (products.length === 0) {
-                    await addInitialProducts();
+                // Se Firestore estiver online, busca de lá antes de checar se está vazio
+                let products = lsGetAll(STORES.PRODUCTS);
+                let combos = lsGetAll(STORES.COMBOS);
+                let settings = lsGetAll(STORES.SETTINGS);
+
+                if (firestoreOnline && firestoreDB) {
+                    try {
+                        const [pSnap, cSnap, sSnap] = await Promise.all([
+                            firestoreDB.collection(STORES.PRODUCTS).get(),
+                            firestoreDB.collection(STORES.COMBOS).get(),
+                            firestoreDB.collection(STORES.SETTINGS).get()
+                        ]);
+                        if (!pSnap.empty) { products = pSnap.docs.map(d => d.data()); lsSave(STORES.PRODUCTS, products); }
+                        if (!cSnap.empty) { combos = cSnap.docs.map(d => d.data()); lsSave(STORES.COMBOS, combos); }
+                        if (!sSnap.empty) { settings = sSnap.docs.map(d => d.data()); lsSave(STORES.SETTINGS, settings); }
+                    } catch(e) { console.warn('⚠️ Erro ao buscar dados do Firestore:', e.message); }
                 }
-                
-                if (combos.length === 0) {
-                    await addInitialCombos();
-                }
-                
-                const settings = await dbGetAll(STORES.SETTINGS);
-                if (settings.length === 0) {
-                    await addDefaultSettings();
-                }
+
+                // Só adiciona dados padrão se realmente não existir nada
+                if (products.length === 0) await addInitialProducts();
+                if (combos.length === 0) await addInitialCombos();
+                if (settings.length === 0) await addDefaultSettings();
                 
                 await ensureAdminExists();
                 
@@ -4493,7 +4545,9 @@
                 showNotification(currentLanguage === 'es' ? '✅ Imagen subida con éxito' : '✅ Imagem enviada com sucesso');
             } catch (err) {
                 console.error('Erro no upload:', err);
-                showNotification(currentLanguage === 'es' ? '❌ Error al subir imagen' : '❌ Erro ao enviar imagem');
+                showNotification(currentLanguage === 'es'
+                    ? '❌ Error al subir imagen. Verifica la conexión a internet.'
+                    : '❌ Erro ao enviar imagem. Verifique a conexão com a internet.');
             }
         }
 
@@ -4531,7 +4585,9 @@
                 showNotification(currentLanguage === 'es' ? '✅ Imagen hero actualizada' : '✅ Imagem hero atualizada');
             } catch (err) {
                 console.error('Erro no upload hero:', err);
-                showNotification(currentLanguage === 'es' ? '❌ Error al subir imagen' : '❌ Erro ao enviar imagem');
+                showNotification(currentLanguage === 'es'
+                    ? '❌ Error al subir imagen. Verifica la conexión a internet.'
+                    : '❌ Erro ao enviar imagem. Verifique a conexão com a internet.');
             }
         }
 
