@@ -601,33 +601,8 @@
             font-size: 1.8rem;
         }
         
-        .login-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 25px;
-        }
-        
-        .login-tab {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            background: var(--light);
-            border-radius: var(--radius);
-            cursor: pointer;
-            font-weight: 600;
-            transition: var(--transition);
-        }
-        
-        .login-tab.active {
-            background: var(--primary);
-            color: var(--white);
-        }
-        
+        /* login-tabs removed — unified form */
         .login-form {
-            display: none;
-        }
-        
-        .login-form.active {
             display: block;
         }
         
@@ -2298,61 +2273,56 @@
     <div class="login-modal" id="loginModal">
         <div class="login-content">
             <button class="close-modal" onclick="closeLoginModal()">&times;</button>
-            <h2 class="login-title" data-es="Iniciar Sesión" data-pt="Entrar">Iniciar Sesión</h2>
-            
-            <div class="login-tabs">
-                <button class="login-tab active" onclick="openLoginTab('client', event)" data-es="Cliente" data-pt="Cliente">Cliente</button>
-                <button class="login-tab" onclick="openLoginTab('admin', event)" data-es="Administrador" data-pt="Administrador">Administrador</button>
+
+            <!-- Ícone + Título -->
+            <div style="text-align:center; margin-bottom:24px;">
+                <div style="width:56px;height:56px;background:linear-gradient(135deg,var(--secondary),var(--primary));border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;">
+                    <i class="fas fa-user" style="color:#fff;font-size:22px;"></i>
+                </div>
+                <h2 class="login-title" style="margin-bottom:4px;" data-es="Bienvenido" data-pt="Bem-vindo">Bem-vindo</h2>
+                <p style="color:var(--gray);font-size:14px;" data-es="Ingresa tus credenciales para continuar" data-pt="Insira suas credenciais para continuar">Insira suas credenciais para continuar</p>
             </div>
-            
-            <!-- Login Cliente -->
-            <div class="login-form active" id="clientLogin">
+
+            <div class="login-form" id="unifiedLogin">
                 <div class="form-group">
-                    <label class="form-label" data-es="Email" data-pt="Email">Email</label>
-                    <input type="email" class="form-input" id="clientEmail" placeholder="ejemplo@gmail.com">
+                    <label class="form-label" data-es="Email o Usuario" data-pt="Email ou Usuário">Email ou Usuário</label>
+                    <div style="position:relative;">
+                        <i class="fas fa-envelope" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:14px;"></i>
+                        <input type="text" class="form-input" id="unifiedIdentifier" placeholder="email@exemplo.com" style="padding-left:40px;" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('unifiedPassword').focus()">
+                    </div>
                 </div>
-                
+
                 <div class="form-group">
-                    <label class="form-label" data-es="Contraseña" data-pt="Senha">Contraseña</label>
-                    <input type="password" class="form-input" id="clientPassword">
+                    <label class="form-label" data-es="Contraseña" data-pt="Senha">Senha</label>
+                    <div style="position:relative;">
+                        <i class="fas fa-lock" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:14px;"></i>
+                        <input type="password" class="form-input" id="unifiedPassword" placeholder="••••••••" style="padding-left:40px;padding-right:44px;" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginUnified()">
+                        <button type="button" onclick="togglePasswordVisibility()" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--gray);font-size:14px;" tabindex="-1">
+                            <i class="fas fa-eye" id="togglePasswordIcon"></i>
+                        </button>
+                    </div>
                 </div>
-                
-                <p class="login-error" id="clientError"></p>
-                
-                <button class="btn btn-primary" style="width: 100%;" onclick="loginClient()">
-                    <span data-es="Ingresar como Cliente" data-pt="Entrar como Cliente">Ingresar como Cliente</span>
+
+                <p class="login-error" id="clientError" style="display:none;"></p>
+                <p class="login-error" id="adminError" style="display:none;"></p>
+                <p class="login-error" id="unifiedError" style="display:none;"></p>
+
+                <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="loginUnified()">
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span data-es="Entrar" data-pt="Entrar">Entrar</span>
                 </button>
-                
-                <p style="text-align: center; margin-top: 20px; color: var(--gray);">
-                    <span data-es="¿Primera vez?" data-pt="Primeira vez?">¿Primera vez?</span>
-                    <a href="#" style="color: var(--primary);" onclick="openRegisterModal()">
-                        <span data-es="Crear cuenta" data-pt="Criar conta">Crear cuenta</span>
-                    </a>
-                </p>
-            </div>
-            
-            <!-- Login Admin -->
-            <div class="login-form" id="adminLogin">
-                <div class="form-group">
-                    <label class="form-label" data-es="Usuario Admin" data-pt="Usuário Admin">Usuario Admin</label>
-                    <input type="text" class="form-input" id="adminUser" placeholder="Usuário">
+
+                <div style="display:flex;align-items:center;gap:10px;margin:18px 0;">
+                    <hr style="flex:1;border:none;border-top:1px solid #e0e0e0;">
+                    <span style="color:var(--gray);font-size:13px;" data-es="¿Primera vez?" data-pt="Primeira vez?">Primeira vez?</span>
+                    <hr style="flex:1;border:none;border-top:1px solid #e0e0e0;">
                 </div>
-                
-                <div class="form-group">
-                    <label class="form-label" data-es="Contraseña" data-pt="Senha">Contraseña</label>
-                    <input type="password" class="form-input" id="adminPassword" placeholder="Senha">
-                </div>
-                
-                <p class="login-error" id="adminError"></p>
-                
-                <button class="btn btn-primary" style="width: 100%;" onclick="loginAdmin()">
-                    <span data-es="Ingresar como Admin" data-pt="Entrar como Admin">Ingresar como Admin</span>
+
+                <button class="btn btn-secondary" style="width:100%;" onclick="openRegisterModal()">
+                    <i class="fas fa-user-plus"></i>
+                    <span data-es="Crear cuenta" data-pt="Criar conta">Criar conta</span>
                 </button>
             </div>
-            
-            <button class="btn btn-secondary" style="width: 100%; margin-top: 15px;" onclick="closeLoginModal()">
-                <span data-es="Cancelar" data-pt="Cancelar">Cancelar</span>
-            </button>
         </div>
     </div>
 
@@ -3471,8 +3441,16 @@
 
         function closeLoginModal() {
             document.getElementById('loginModal').style.display = 'none';
-            document.getElementById('clientError').style.display = 'none';
-            document.getElementById('adminError').style.display = 'none';
+            const unifiedId = document.getElementById('unifiedIdentifier');
+            const unifiedPw = document.getElementById('unifiedPassword');
+            const unifiedErr = document.getElementById('unifiedError');
+            if (unifiedId) unifiedId.value = '';
+            if (unifiedPw) unifiedPw.value = '';
+            if (unifiedErr) unifiedErr.style.display = 'none';
+            const clientErr = document.getElementById('clientError');
+            const adminErr = document.getElementById('adminError');
+            if (clientErr) clientErr.style.display = 'none';
+            if (adminErr) adminErr.style.display = 'none';
         }
 
         function openRegisterModal() {
@@ -3670,6 +3648,77 @@
             } else {
                 document.getElementById('adminError').textContent = currentLanguage === 'es' ? 'Usuario o contraseña incorrectos' : 'Usuário ou senha incorretos';
                 document.getElementById('adminError').style.display = 'block';
+            }
+        }
+
+        // ===== LOGIN UNIFICADO =====
+        async function loginUnified() {
+            const identifier = document.getElementById('unifiedIdentifier').value.trim();
+            const password = document.getElementById('unifiedPassword').value.trim();
+            const errorEl = document.getElementById('unifiedError');
+
+            errorEl.style.display = 'none';
+
+            if (!identifier || !password) {
+                errorEl.textContent = currentLanguage === 'es' ? 'Por favor, complete todos los campos' : 'Por favor, preencha todos os campos';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            // Verificar se é admin
+            const adminCredentials = { user: 'gladz', password: 'gladz123' };
+            if (identifier === adminCredentials.user && password === adminCredentials.password) {
+                const adminUser = {
+                    id: 'admin', type: 'admin', name: 'Administrador',
+                    email: 'admin@nutribalance.com', created: new Date().toISOString()
+                };
+                localStorage.setItem('currentUserId', 'admin');
+                localStorage.setItem('nutribalance_user', JSON.stringify(adminUser));
+                currentUser = adminUser;
+                updateUserInterface();
+                closeLoginModal();
+                showNotification(currentLanguage === 'es' ? '✅ ¡Bienvenido, Administrador!' : '✅ Bem-vindo, Administrador!');
+                dbPut(STORES.USERS, adminUser).catch(() => {});
+                return;
+            }
+
+            // Tentar login como cliente (por email)
+            try {
+                const client = await dbGetByIndex(STORES.CLIENTS, 'by_email', identifier);
+                const hashedPassword = await hashPassword(password);
+
+                if (client && client.password === hashedPassword) {
+                    const user = {
+                        id: client.id, type: 'client', name: client.name,
+                        email: client.email, clientId: client.id
+                    };
+                    await dbPut(STORES.USERS, user);
+                    localStorage.setItem('currentUserId', client.id.toString());
+                    localStorage.setItem('nutribalance_user', JSON.stringify(user));
+                    currentUser = user;
+                    updateUserInterface();
+                    closeLoginModal();
+                    showNotification(currentLanguage === 'es' ? `✅ ¡Bienvenido de nuevo, ${client.name}!` : `✅ Bem-vindo de volta, ${client.name}!`);
+                } else {
+                    errorEl.textContent = currentLanguage === 'es' ? 'Credenciales incorrectas' : 'Credenciais incorretas';
+                    errorEl.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('❌ Erro ao fazer login:', error);
+                errorEl.textContent = currentLanguage === 'es' ? 'Error al iniciar sesión' : 'Erro ao fazer login';
+                errorEl.style.display = 'block';
+            }
+        }
+
+        function togglePasswordVisibility() {
+            const input = document.getElementById('unifiedPassword');
+            const icon = document.getElementById('togglePasswordIcon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.replace('fa-eye', 'fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.replace('fa-eye-slash', 'fa-eye');
             }
         }
 
