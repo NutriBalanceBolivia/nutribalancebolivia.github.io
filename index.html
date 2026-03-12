@@ -2546,6 +2546,12 @@
                     <button type="button" class="upload-btn" onclick="document.getElementById('heroCarneUpload').click()">
                         <i class="fas fa-upload"></i> <span data-es="Subir Imagen" data-pt="Enviar Imagem">Subir Imagen</span>
                     </button>
+                    <div style="margin-top:12px;">
+                        <label class="form-label" style="font-size:13px;" data-es="Texto de la leyenda (visible en la foto)" data-pt="Texto da legenda (visível na foto)">Texto da legenda (visível na foto)</label>
+                        <input type="text" class="form-input" id="heroCarneLabel" placeholder="Ex: Carne Fitness"
+                               oninput="document.getElementById('carneLabel').textContent = this.value || 'Carne Fitness'"
+                               style="margin-top:4px;">
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -2564,6 +2570,12 @@
                     <button type="button" class="upload-btn" onclick="document.getElementById('heroFrangoUpload').click()">
                         <i class="fas fa-upload"></i> <span data-es="Subir Imagen" data-pt="Enviar Imagem">Subir Imagen</span>
                     </button>
+                    <div style="margin-top:12px;">
+                        <label class="form-label" style="font-size:13px;" data-es="Texto de la leyenda (visible en la foto)" data-pt="Texto da legenda (visível na foto)">Texto da legenda (visível na foto)</label>
+                        <input type="text" class="form-input" id="heroFrangoLabel" placeholder="Ex: Frango Fitness"
+                               oninput="document.getElementById('frangoLabel').textContent = this.value || 'Frango Fitness'"
+                               style="margin-top:4px;">
+                    </div>
                 </div>
                 
                 <button class="btn btn-primary" onclick="saveHeroImages()" id="saveHeroImagesBtn">
@@ -4401,9 +4413,13 @@
                 if (settings && settings.heroImages) {
                     const carneUrlInput = document.getElementById('heroCarneUrl');
                     const frangoUrlInput = document.getElementById('heroFrangoUrl');
+                    const carneLabelInput = document.getElementById('heroCarneLabel');
+                    const frangoLabelInput = document.getElementById('heroFrangoLabel');
                     
                     if (carneUrlInput) carneUrlInput.value = settings.heroImages.carne || '';
                     if (frangoUrlInput) frangoUrlInput.value = settings.heroImages.frango || '';
+                    if (carneLabelInput) carneLabelInput.value = settings.heroImages.carneLabel || '';
+                    if (frangoLabelInput) frangoLabelInput.value = settings.heroImages.frangoLabel || '';
                     
                     updateHeroImagePreview(settings.heroImages.carne, 'heroCarnePreview', 'carnePreviewContainer');
                     updateHeroImagePreview(settings.heroImages.frango, 'heroFrangoPreview', 'frangoPreviewContainer');
@@ -4419,8 +4435,8 @@
                 if (settings && settings.heroImages) {
                     const carneImage = document.getElementById('carneImage');
                     const frangoImage = document.getElementById('frangoImage');
-                    const carneLabel = document.getElementById('carneLabel');
-                    const frangoLabel = document.getElementById('frangoLabel');
+                    const carneLabelEl = document.getElementById('carneLabel');
+                    const frangoLabelEl = document.getElementById('frangoLabel');
                     
                     if (carneImage && settings.heroImages.carne) {
                         carneImage.src = settings.heroImages.carne;
@@ -4429,22 +4445,16 @@
                         frangoImage.src = settings.heroImages.frango;
                     }
                     
-                    if (carneLabel) {
-                        if (settings.heroImages.carneText && settings.heroImages.carneText.trim() !== '') {
-                            carneLabel.textContent = settings.heroImages.carneText;
-                            carneLabel.style.display = 'block';
-                        } else {
-                            carneLabel.style.display = 'none';
-                        }
+                    if (carneLabelEl) {
+                        const txt = settings.heroImages.carneLabel;
+                        carneLabelEl.textContent = (txt && txt.trim() !== '') ? txt : 'Carne Fitness';
+                        carneLabelEl.style.display = 'block';
                     }
                     
-                    if (frangoLabel) {
-                        if (settings.heroImages.frangoText && settings.heroImages.frangoText.trim() !== '') {
-                            frangoLabel.textContent = settings.heroImages.frangoText;
-                            frangoLabel.style.display = 'block';
-                        } else {
-                            frangoLabel.style.display = 'none';
-                        }
+                    if (frangoLabelEl) {
+                        const txt = settings.heroImages.frangoLabel;
+                        frangoLabelEl.textContent = (txt && txt.trim() !== '') ? txt : 'Frango Fitness';
+                        frangoLabelEl.style.display = 'block';
                     }
                 }
             } catch (error) {
@@ -4718,6 +4728,8 @@
             try {
                 const carneUrl = document.getElementById('heroCarneUrl').value;
                 const frangoUrl = document.getElementById('heroFrangoUrl').value;
+                const carneLabelText = document.getElementById('heroCarneLabel').value.trim();
+                const frangoLabelText = document.getElementById('heroFrangoLabel').value.trim();
                 
                 let settings = await dbGet(STORES.SETTINGS, 'app_settings');
                 if (!settings) {
@@ -4728,12 +4740,11 @@
                     settings.heroImages = {};
                 }
                 
-                if (carneUrl) {
-                    settings.heroImages.carne = carneUrl;
-                }
-                if (frangoUrl) {
-                    settings.heroImages.frango = frangoUrl;
-                }
+                if (carneUrl) settings.heroImages.carne = carneUrl;
+                if (frangoUrl) settings.heroImages.frango = frangoUrl;
+                // Salva legendas sempre (mesmo vazio, para limpar)
+                settings.heroImages.carneLabel = carneLabelText;
+                settings.heroImages.frangoLabel = frangoLabelText;
                 
                 await dbPut(STORES.SETTINGS, settings);
                 
@@ -4750,10 +4761,15 @@
                         const frangoImage = document.getElementById('frangoImage');
                         if (frangoImage) frangoImage.src = frangoUrl;
                     }
+                    // Atualiza legendas no hero imediatamente
+                    const carneLabelEl = document.getElementById('carneLabel');
+                    const frangoLabelEl = document.getElementById('frangoLabel');
+                    if (carneLabelEl) carneLabelEl.textContent = carneLabelText || 'Carne Fitness';
+                    if (frangoLabelEl) frangoLabelEl.textContent = frangoLabelText || 'Frango Fitness';
                     
                     showNotification(currentLanguage === 'es' 
                         ? '✅ Imágenes guardadas correctamente' 
-                        : '✅ Imagens salvas com sucesso');
+                        : '✅ Imagens e legendas salvas com sucesso');
                 }, 500);
             } catch (error) {
                 console.error('❌ Erro ao salvar imagens hero:', error);
