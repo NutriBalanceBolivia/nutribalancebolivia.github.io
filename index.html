@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +7,10 @@
     
     <!-- Font Awesome para ícones -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- ===== FIREBASE SDK ===== -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
     
     <style>
         /* ===== VARIÁVEIS & RESET ===== */
@@ -257,6 +261,68 @@
             color: var(--dark);
             cursor: pointer;
             padding: 3px;
+        }
+
+        /* ===== MENU MOBILE OVERLAY ===== */
+        .mobile-nav-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1500;
+        }
+
+        .mobile-nav-overlay.open {
+            display: block;
+        }
+
+        .mobile-nav-menu {
+            position: fixed;
+            top: 0;
+            right: -280px;
+            width: 280px;
+            height: 100%;
+            background: var(--white);
+            z-index: 1600;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.15);
+            transition: right 0.3s ease;
+            padding: 80px 30px 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .mobile-nav-menu.open {
+            right: 0;
+        }
+
+        .mobile-nav-menu a {
+            text-decoration: none;
+            color: var(--dark);
+            font-weight: 600;
+            font-size: 18px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--light);
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .mobile-nav-menu a:hover {
+            color: var(--primary);
+        }
+
+        .mobile-nav-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 26px;
+            cursor: pointer;
+            color: var(--dark);
         }
         
         /* ===== WHATSAPP - CORREÇÃO DEFINITIVA ===== */
@@ -1781,7 +1847,7 @@
     <!-- ===== DEBUG TOOLS (Só aparece em localhost) ===== -->
     <div class="debug-tools" id="debugTools">
         <button class="debug-btn" onclick="clearAllData()">🗑️ Limpar Tudo</button>
-        <button class="debug-btn" onclick="location.reload(true)">🔄 Recarregar</button>
+        <button class="debug-btn" onclick="location.reload()">🔄 Recarregar</button>
         <button class="debug-btn" onclick="showDebugInfo()">ℹ️ Info</button>
         <button class="debug-btn" onclick="forceAdminLogin()">👑 Forçar Admin</button>
         <button class="debug-btn" onclick="testDataPersistence()">💾 Testar Persistência</button>
@@ -2217,6 +2283,16 @@
         <i class="fab fa-whatsapp"></i>
     </a>
 
+    <!-- ===== MENU MOBILE ===== -->
+    <div class="mobile-nav-overlay" id="mobileNavOverlay" onclick="closeMobileMenu()"></div>
+    <div class="mobile-nav-menu" id="mobileNavMenu">
+        <button class="mobile-nav-close" onclick="closeMobileMenu()">&times;</button>
+        <a onclick="closeMobileMenu(); goToSection('inicio')" data-es="Inicio" data-pt="Início">🏠 Início</a>
+        <a onclick="closeMobileMenu(); goToSection('cardapio')" data-es="Menú" data-pt="Cardápio">🥗 Cardápio</a>
+        <a onclick="closeMobileMenu(); goToSection('combos')" data-es="Combos" data-pt="Combos">🎁 Combos</a>
+        <a onclick="closeMobileMenu(); openCartPage()" data-es="Carrito" data-pt="Carrinho">🛒 Carrinho</a>
+    </div>
+
     <!-- ===== MODAL DE LOGIN ===== -->
     <div class="login-modal" id="loginModal">
         <div class="login-content">
@@ -2224,8 +2300,8 @@
             <h2 class="login-title" data-es="Iniciar Sesión" data-pt="Entrar">Iniciar Sesión</h2>
             
             <div class="login-tabs">
-                <button class="login-tab active" onclick="openLoginTab('client')" data-es="Cliente" data-pt="Cliente">Cliente</button>
-                <button class="login-tab" onclick="openLoginTab('admin')" data-es="Administrador" data-pt="Administrador">Administrador</button>
+                <button class="login-tab active" onclick="openLoginTab('client', event)" data-es="Cliente" data-pt="Cliente">Cliente</button>
+                <button class="login-tab" onclick="openLoginTab('admin', event)" data-es="Administrador" data-pt="Administrador">Administrador</button>
             </div>
             
             <!-- Login Cliente -->
@@ -2568,7 +2644,7 @@
                     <input type="text" class="form-input" id="qrcodeUrl" 
                            placeholder="URL de la imagen del QR Code"
                            style="margin-bottom: 10px;">
-                    <input type="file" class="upload-input" id="qrcodeUpload" accept="image/*" onchange="uploadImage(this, 'qrcodePreview', 'qrcodeUrl')">
+                    <input type="file" class="upload-input" id="qrcodeUpload" accept="image/*" onchange="uploadImage(this, 'qrcodePreview', 'qrcodeUrl', 'qrcode')">
                     <button type="button" class="upload-btn" onclick="document.getElementById('qrcodeUpload').click()">
                         <i class="fas fa-upload"></i> <span data-es="Subir QR Code" data-pt="Enviar QR Code">Subir QR Code</span>
                     </button>
@@ -2679,6 +2755,48 @@
 
     <!-- ===== JAVASCRIPT ===== -->
     <script>
+        // ===== FIREBASE CONFIG & INICIALIZAÇÃO =====
+        const firebaseConfig = {
+            apiKey: "AIzaSyByOXHY2U4P6Dv8BduMm8HXQlJm8KibpIQ",
+            authDomain: "nutribalance-adc59.firebaseapp.com",
+            projectId: "nutribalance-adc59",
+            storageBucket: "nutribalance-adc59.firebasestorage.app",
+            messagingSenderId: "606212700173",
+            appId: "1:606212700173:web:7d3d8db6b9492d2de03d44"
+        };
+
+        let firebaseApp = null;
+        let firebaseStorage = null;
+
+        try {
+            firebaseApp = firebase.initializeApp(firebaseConfig);
+            firebaseStorage = firebase.storage();
+            console.log('🔥 Firebase Storage conectado com sucesso!');
+        } catch (e) {
+            console.warn('⚠️ Firebase não disponível, usando base64 local:', e.message);
+        }
+
+        // Faz upload de um File para o Firebase Storage e retorna a URL pública
+        async function uploadToFirebase(file, folder = 'images') {
+            if (!firebaseStorage) {
+                // Fallback: converte para base64 local
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            const ext = file.name.split('.').pop();
+            const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substr(2, 8)}.${ext}`;
+            const storageRef = firebaseStorage.ref(fileName);
+
+            const snapshot = await storageRef.put(file);
+            const downloadURL = await snapshot.ref.getDownloadURL();
+            return downloadURL;
+        }
+
         // ===== CONFIGURAÇÃO INICIAL =====
         let currentLanguage = 'es';
         let cart = [];
@@ -2996,11 +3114,20 @@
         }
 
         function dbGetByIndex(storeName, indexName, value) {
+            // Mapa de nomes de índice para campos reais dos objetos
+            const indexToField = {
+                'by_email': 'email',
+                'by_client': 'clientId',
+                'by_date': 'date',
+                'by_type': 'type'
+            };
+
             return new Promise((resolve, reject) => {
                 if (!db) {
                     const key = `nutribalance_${storeName}`;
                     const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                    const item = existing.find(item => item[indexName] === value);
+                    const fieldName = indexToField[indexName] || indexName;
+                    const item = existing.find(item => item[fieldName] === value);
                     resolve(item || null);
                     return;
                 }
@@ -3378,7 +3505,7 @@
                             
                             <div class="product-footer">
                                 <div class="product-price">${currencySymbol} ${product.price.toFixed(2)}</div>
-                                <button class="add-to-cart" onclick="addToCart(${product.id}, '${currentLanguage === 'es' ? product.nameEs : product.namePt}', ${product.price}, 'product', '${product.imageUrl}')">
+                                <button class="add-to-cart" onclick="addToCart(${product.id}, '${(currentLanguage === 'es' ? product.nameEs : product.namePt).replace(/'/g, "\\'")}', ${product.price}, 'product', '${product.imageUrl.replace(/'/g, "\\'")}')">
                                     <i class="fas fa-plus"></i>
                                 </button>
                             </div>
@@ -3413,7 +3540,7 @@
                             
                             <div class="product-footer">
                                 <div class="product-price">${currencySymbol} ${combo.price.toFixed(2)}</div>
-                                <button class="add-to-cart" onclick="addToCart(${combo.id}, '${currentLanguage === 'es' ? combo.nameEs : combo.namePt}', ${combo.price}, 'combo', '${combo.imageUrl}')">
+                                <button class="add-to-cart" onclick="addToCart(${combo.id}, '${(currentLanguage === 'es' ? combo.nameEs : combo.namePt).replace(/'/g, "\\'")}', ${combo.price}, 'combo', '${combo.imageUrl.replace(/'/g, "\\'")}')">
                                     <i class="fas fa-plus"></i>
                                 </button>
                             </div>
@@ -3428,6 +3555,15 @@
         }
 
         // ===== SISTEMA DE LOGIN E REGISTRO =====
+
+        // Hash de senha usando Web Crypto API (SHA-256)
+        async function hashPassword(password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
         function openLoginModal() {
             closeRegisterModal();
             document.getElementById('loginModal').style.display = 'flex';
@@ -3456,7 +3592,7 @@
             openLoginModal();
         }
 
-        function openLoginTab(tab) {
+        function openLoginTab(tab, event) {
             document.querySelectorAll('.login-form').forEach(form => {
                 form.classList.remove('active');
             });
@@ -3465,7 +3601,7 @@
             });
             
             document.getElementById(tab + 'Login').classList.add('active');
-            event.target.classList.add('active');
+            if (event && event.target) event.target.classList.add('active');
         }
 
         function openRegisterTab(tab) {
@@ -3522,7 +3658,7 @@
                     email: email,
                     phone: phone,
                     birthday: birthday,
-                    password: password,
+                    password: await hashPassword(password),
                     registrationDate: new Date().toISOString(),
                     totalOrders: 0,
                     totalSpent: 0,
@@ -3572,8 +3708,9 @@
             
             try {
                 const client = await dbGetByIndex(STORES.CLIENTS, 'by_email', email);
+                const hashedPassword = await hashPassword(password);
                 
-                if (client && client.password === password) {
+                if (client && client.password === hashedPassword) {
                     const user = {
                         id: client.id,
                         type: 'client',
@@ -4377,56 +4514,76 @@
         }
 
         // ===== FUNÇÕES DE UPLOAD DE IMAGENS =====
-        function uploadImage(input, previewId, urlInputId) {
+        async function uploadImage(input, previewId, urlInputId, folder = 'produtos') {
             const file = input.files[0];
             if (!file) return;
-            
+
             if (file.size > 5 * 1024 * 1024) {
-                showNotification(currentLanguage === 'es' 
-                    ? '⚠️ La imagen es demasiado grande (máximo 5MB)' 
+                showNotification(currentLanguage === 'es'
+                    ? '⚠️ La imagen es demasiado grande (máximo 5MB)'
                     : '⚠️ A imagem é muito grande (máximo 5MB)');
                 return;
             }
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const dataUrl = e.target.result;
-                const preview = document.getElementById(previewId);
-                const urlInput = document.getElementById(urlInputId);
-                
-                if (preview) preview.src = dataUrl;
-                if (urlInput) urlInput.value = dataUrl;
+
+            const preview = document.getElementById(previewId);
+            const urlInput = document.getElementById(urlInputId);
+
+            // Mostra preview local imediato enquanto faz upload
+            const localReader = new FileReader();
+            localReader.onload = e => {
+                if (preview) { preview.src = e.target.result; preview.style.display = 'block'; }
             };
-            reader.readAsDataURL(file);
+            localReader.readAsDataURL(file);
+
+            showNotification(currentLanguage === 'es' ? '⏳ Subiendo imagen...' : '⏳ Enviando imagem...');
+
+            try {
+                const url = await uploadToFirebase(file, folder);
+                if (urlInput) urlInput.value = url;
+                if (preview) { preview.src = url; preview.style.display = 'block'; }
+                showNotification(currentLanguage === 'es' ? '✅ Imagen subida con éxito' : '✅ Imagem enviada com sucesso');
+            } catch (err) {
+                console.error('Erro no upload:', err);
+                showNotification(currentLanguage === 'es' ? '❌ Error al subir imagen' : '❌ Erro ao enviar imagem');
+            }
         }
 
-        function uploadHeroImage(input, previewId, urlInputId, containerId) {
+        async function uploadHeroImage(input, previewId, urlInputId, containerId) {
             const file = input.files[0];
             if (!file) return;
-            
+
             if (file.size > 5 * 1024 * 1024) {
-                showNotification(currentLanguage === 'es' 
-                    ? '⚠️ La imagen es demasiado grande (máximo 5MB)' 
+                showNotification(currentLanguage === 'es'
+                    ? '⚠️ La imagen es demasiado grande (máximo 5MB)'
                     : '⚠️ A imagem é muito grande (máximo 5MB)');
                 return;
             }
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const dataUrl = e.target.result;
-                const preview = document.getElementById(previewId);
-                const urlInput = document.getElementById(urlInputId);
-                const container = document.getElementById(containerId);
-                const placeholder = container.querySelector('div');
-                
-                if (preview) {
-                    preview.src = dataUrl;
-                    preview.style.display = 'block';
-                }
-                if (urlInput) urlInput.value = dataUrl;
+
+            const preview = document.getElementById(previewId);
+            const urlInput = document.getElementById(urlInputId);
+            const container = document.getElementById(containerId);
+            const placeholder = container ? container.querySelector('div') : null;
+
+            // Preview local imediato
+            const localReader = new FileReader();
+            localReader.onload = e => {
+                if (preview) { preview.src = e.target.result; preview.style.display = 'block'; }
                 if (placeholder) placeholder.style.display = 'none';
             };
-            reader.readAsDataURL(file);
+            localReader.readAsDataURL(file);
+
+            showNotification(currentLanguage === 'es' ? '⏳ Subiendo imagen hero...' : '⏳ Enviando imagem hero...');
+
+            try {
+                const url = await uploadToFirebase(file, 'hero');
+                if (urlInput) urlInput.value = url;
+                if (preview) { preview.src = url; preview.style.display = 'block'; }
+                if (placeholder) placeholder.style.display = 'none';
+                showNotification(currentLanguage === 'es' ? '✅ Imagen hero actualizada' : '✅ Imagem hero atualizada');
+            } catch (err) {
+                console.error('Erro no upload hero:', err);
+                showNotification(currentLanguage === 'es' ? '❌ Error al subir imagen' : '❌ Erro ao enviar imagem');
+            }
         }
 
         function updateImagePreview(url, previewId = 'imagePreview') {
@@ -5413,9 +5570,87 @@
                     }
                 });
             });
-            
-            console.log('✅ Aplicação inicializada com sucesso! Todas as fotos do Imgur estão carregadas.');
+
+            // ===== MENU MOBILE =====
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            if (mobileMenuBtn) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    openMobileMenu();
+                });
+            }
+
+            console.log('✅ NutriBalance inicializado com sucesso!');
         });
+
+        // ===== FUNÇÕES DE DEBUG =====
+        async function clearAllData() {
+            if (!confirm('⚠️ Tem certeza? Todos os dados serão apagados!')) return;
+            try {
+                const stores = Object.values(STORES);
+                for (const store of stores) {
+                    const items = await dbGetAll(store);
+                    for (const item of items) {
+                        await dbDelete(store, item.id);
+                    }
+                    localStorage.removeItem(`nutribalance_${store}`);
+                }
+                localStorage.clear();
+                showNotification('🗑️ Todos os dados apagados!');
+                setTimeout(() => location.reload(), 1000);
+            } catch (e) {
+                console.error('Erro ao limpar dados:', e);
+                showNotification('❌ Erro ao limpar dados');
+            }
+        }
+
+        async function showDebugInfo() {
+            const products = await dbGetAll(STORES.PRODUCTS);
+            const combos = await dbGetAll(STORES.COMBOS);
+            const clients = await dbGetAll(STORES.CLIENTS);
+            const orders = await dbGetAll(STORES.ORDERS);
+            const info = `📊 INFO DO BANCO:\n• Produtos: ${products.length}\n• Combos: ${combos.length}\n• Clientes: ${clients.length}\n• Pedidos: ${orders.length}\n• DB ativo: ${db ? 'IndexedDB' : 'localStorage'}\n• Usuário: ${currentUser ? currentUser.name : 'Nenhum'}`;
+            alert(info);
+        }
+
+        async function forceAdminLogin() {
+            const adminUser = { id: 'admin', type: 'admin', name: 'Administrador', email: 'admin@nutribalance.com' };
+            await dbPut(STORES.USERS, adminUser);
+            localStorage.setItem('currentUserId', 'admin');
+            localStorage.setItem('nutribalance_user', JSON.stringify(adminUser));
+            currentUser = adminUser;
+            updateUserInterface();
+            showNotification('👑 Login admin forçado!');
+        }
+
+        async function testDataPersistence() {
+            try {
+                const testKey = 'test_persist_' + Date.now();
+                const testData = { id: testKey, value: 'ok', ts: new Date().toISOString() };
+                await dbPut(STORES.SETTINGS, testData);
+                const result = await dbGet(STORES.SETTINGS, testKey);
+                await dbDelete(STORES.SETTINGS, testKey);
+                if (result && result.value === 'ok') {
+                    showNotification('✅ Persistência funcionando corretamente!');
+                } else {
+                    showNotification('⚠️ Persistência com problema!');
+                }
+            } catch (e) {
+                showNotification('❌ Erro no teste: ' + e.message);
+            }
+        }
+
+        function openMobileMenu() {
+            document.getElementById('mobileNavMenu').classList.add('open');
+            document.getElementById('mobileNavOverlay').classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileMenu() {
+            document.getElementById('mobileNavMenu').classList.remove('open');
+            document.getElementById('mobileNavOverlay').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
     </script>
 </body>
 </html>
