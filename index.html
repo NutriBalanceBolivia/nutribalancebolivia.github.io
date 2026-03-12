@@ -2335,12 +2335,12 @@
             <div class="login-form" id="adminLogin">
                 <div class="form-group">
                     <label class="form-label" data-es="Usuario Admin" data-pt="Usuário Admin">Usuario Admin</label>
-                    <input type="text" class="form-input" id="adminUser" placeholder="gladz">
+                    <input type="text" class="form-input" id="adminUser" placeholder="">
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label" data-es="Contraseña" data-pt="Senha">Contraseña</label>
-                    <input type="password" class="form-input" id="adminPassword" placeholder="gladz123">
+                    <input type="password" class="form-input" id="adminPassword" placeholder="">
                 </div>
                 
                 <p class="login-error" id="adminError"></p>
@@ -3555,8 +3555,8 @@
         }
 
         async function loginAdmin() {
-            const user = document.getElementById('adminUser').value;
-            const password = document.getElementById('adminPassword').value;
+            const user = document.getElementById('adminUser').value.trim();
+            const password = document.getElementById('adminPassword').value.trim();
             
             const adminCredentials = {
                 user: 'gladz',
@@ -3564,33 +3564,29 @@
             };
             
             if (user === adminCredentials.user && password === adminCredentials.password) {
+                const adminUser = {
+                    id: 'admin',
+                    type: 'admin',
+                    name: 'Administrador',
+                    email: 'admin@nutribalance.com',
+                    created: new Date().toISOString()
+                };
+
+                // Salva no Firestore em segundo plano (não bloqueia o login)
                 try {
-                    let adminUser = await dbGet(STORES.USERS, 'admin');
-                    
-                    if (!adminUser) {
-                        adminUser = {
-                            id: 'admin',
-                            type: 'admin',
-                            name: 'Administrador',
-                            email: 'admin@nutribalance.com',
-                            created: new Date().toISOString()
-                        };
-                        await dbPut(STORES.USERS, adminUser);
-                    }
-                    
-                    localStorage.setItem('currentUserId', 'admin');
-                    localStorage.setItem('nutribalance_user', JSON.stringify(adminUser));
-                    
-                    currentUser = adminUser;
-                    updateUserInterface();
-                    closeLoginModal();
-                    
-                    showNotification(currentLanguage === 'es' ? '✅ ¡Bienvenido, Administrador!' : '✅ Bem-vindo, Administrador!');
-                } catch (error) {
-                    console.error('❌ Erro ao fazer login do admin:', error);
-                    document.getElementById('adminError').textContent = currentLanguage === 'es' ? 'Error al iniciar sesión' : 'Erro ao fazer login';
-                    document.getElementById('adminError').style.display = 'block';
+                    await dbPut(STORES.USERS, adminUser);
+                } catch (e) {
+                    console.warn('⚠️ Firestore indisponível, login local:', e.message);
                 }
+
+                localStorage.setItem('currentUserId', 'admin');
+                localStorage.setItem('nutribalance_user', JSON.stringify(adminUser));
+                
+                currentUser = adminUser;
+                updateUserInterface();
+                closeLoginModal();
+                
+                showNotification(currentLanguage === 'es' ? '✅ ¡Bienvenido, Administrador!' : '✅ Bem-vindo, Administrador!');
             } else {
                 document.getElementById('adminError').textContent = currentLanguage === 'es' ? 'Usuario o contraseña incorrectos' : 'Usuário ou senha incorretos';
                 document.getElementById('adminError').style.display = 'block';
