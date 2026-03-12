@@ -2335,12 +2335,12 @@
             <div class="login-form" id="adminLogin">
                 <div class="form-group">
                     <label class="form-label" data-es="Usuario Admin" data-pt="Usuário Admin">Usuario Admin</label>
-                    <input type="text" class="form-input" id="adminUser" placeholder="">
+                    <input type="text" class="form-input" id="adminUser" placeholder="Usuário">
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label" data-es="Contraseña" data-pt="Senha">Contraseña</label>
-                    <input type="password" class="form-input" id="adminPassword" placeholder="">
+                    <input type="password" class="form-input" id="adminPassword" placeholder="Senha">
                 </div>
                 
                 <p class="login-error" id="adminError"></p>
@@ -2858,92 +2858,171 @@
             }
         }
 
-        // ===== FIREBASE FIRESTORE FUNCTIONS =====
+        // ===== BANCO DE DADOS: localStorage + Firebase Firestore (sincronização) =====
+        let firestoreOnline = false; // começa assumindo offline
+
+        function lsKey(storeName) {
+            return `nutribalance_${storeName}`;
+        }
+
+        function lsGetAll(storeName) {
+            try { return JSON.parse(localStorage.getItem(lsKey(storeName)) || '[]'); }
+            catch(e) { return []; }
+        }
+
+        function lsSave(storeName, items) {
+            localStorage.setItem(lsKey(storeName), JSON.stringify(items));
+        }
+
         async function initDatabase() {
-            try {
-                updateDBStatus('🔥 Conectando ao Firebase...');
-                if (!firestoreDB) throw new Error('Firestore não inicializado');
-                // Testa conexão
-                await firestoreDB.collection(STORES.SETTINGS).doc('ping_test').get();
-                updateDBStatus('🔥 Firebase Firestore conectado');
-                console.log('✅ Firebase Firestore conectado com sucesso!');
-                await checkInitialData();
-                await loadInitialData();
-                return true;
-            } catch (error) {
-                console.error('❌ Erro ao conectar ao Firebase:', error);
-                updateDBStatus('❌ Erro Firebase: ' + error.message);
-                // Tenta carregar dados mesmo assim
-                await loadInitialData();
-                return false;
+            updateDBStatus('⏳ Iniciando...');
+            // Carrega dados locais imediatamente (nunca bloqueia)
+            await checkInitialData();
+            await loadInitialData();
+
+            // Tenta conectar ao Firestore em segundo plano
+            if (firestoreDB) {
+                try {
+                    await Promise.race([
+                        firestoreDB.collection(STORES.SETTINGS).doc('_ping').get(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                    ]);
+                    firestoreOnline = true;
+                    updateDBStatus('🔥 Firebase conectado');
+                    console.log('✅ Firestore online — sincronizando...');
+                    await syncLocalToFirestore();
+                    await loadInitialData(); // recarrega com dados da nuvem
+                } catch (e) {
+                    firestoreOnline = false;
+                    updateDBStatus('💾 Modo local (Firebase offline)');
+                    console.warn('⚠️ Firestore offline, usando localStorage:', e.message);
+                }
+            } else {
+                updateDBStatus('💾 Modo local');
+            }
+        }
+
+        // Sincroniza dados locais para o Firestore quando ficar online
+        async function syncLocalToFirestore() {
+            const stores = Object.values(STORES);
+            for (const store of stores) {
+                const localItems = lsGetAll(store);
+                for (const item of localItems) {
+                    try {
+                        const docId = String(item.id);
+                        await firestoreDB.collection(store).doc(docId).set(item, { merge: true });
+                    } catch(e) { /* ignora erros individuais */ }
+                }
             }
         }
 
         function updateDBStatus(status) {
             const dbStatus = document.getElementById('dbStatus');
-            if (dbStatus) {
-                dbStatus.textContent = status;
-            }
+            if (dbStatus) dbStatus.textContent = status;
         }
 
-        // ===== OPERAÇÕES DO BANCO DE DADOS (FIRESTORE) =====
+        // ===== OPERAÇÕES DO BANCO: localStorage primeiro, Firestore em segundo plano =====
         async function dbGetAll(storeName) {
-            try {
-                const snapshot = await firestoreDB.collection(storeName).get();
-                return snapshot.docs.map(doc => doc.data());
-            } catch (error) {
-                console.error(`❌ Erro ao buscar dados de ${storeName}:`, error);
-                return [];
-            }
-        }
+            // Sempre retorna localStorage imediatamente
+            const localData = lsGetAll(storeName);
 
-        async function dbAdd(storeName, data) {
-            try {
-                if (data.id === undefined || data.id === null) {
-                    const docRef = await firestoreDB.collection(storeName).add(data);
-                    const newData = { ...data, id: docRef.id };
-                    await firestoreDB.collection(storeName).doc(docRef.id).set(newData);
-                    return newData;
-                } else {
-                    await firestoreDB.collection(storeName).doc(String(data.id)).set(data);
-                    return data;
+            // Se Firestore online, busca lá e atualiza local
+            if (firestoreOnline && firestoreDB) {
+                try {
+                    const snapshot = await firestoreDB.collection(storeName).get();
+                    if (!snapshot.empty) {
+                        const items = snapshot.docs.map(doc => doc.data());
+                        lsSave(storeName, items);
+                        return items;
+                    }
+                } catch(e) {
+                    firestoreOnline = false;
+                    updateDBStatus('💾 Modo local (Firebase offline)');
                 }
-            } catch (error) {
-                console.error(`❌ Erro ao adicionar em ${storeName}:`, error);
-                throw error;
             }
-        }
-
-        async function dbPut(storeName, data) {
-            try {
-                const docId = data.id !== undefined && data.id !== null ? String(data.id) : firestoreDB.collection(storeName).doc().id;
-                const dataToSave = { ...data, id: docId };
-                await firestoreDB.collection(storeName).doc(docId).set(dataToSave, { merge: true });
-                return dataToSave;
-            } catch (error) {
-                console.error(`❌ Erro ao salvar em ${storeName}:`, error);
-                throw error;
-            }
-        }
-
-        async function dbDelete(storeName, id) {
-            try {
-                await firestoreDB.collection(storeName).doc(String(id)).delete();
-                return true;
-            } catch (error) {
-                console.error(`❌ Erro ao deletar de ${storeName}:`, error);
-                throw error;
-            }
+            return localData;
         }
 
         async function dbGet(storeName, id) {
-            try {
-                const doc = await firestoreDB.collection(storeName).doc(String(id)).get();
-                return doc.exists ? doc.data() : null;
-            } catch (error) {
-                console.error(`❌ Erro ao buscar ${id} de ${storeName}:`, error);
-                return null;
+            // Busca no localStorage primeiro
+            const localItems = lsGetAll(storeName);
+            const localItem = localItems.find(i => String(i.id) === String(id)) || null;
+
+            if (firestoreOnline && firestoreDB) {
+                try {
+                    const doc = await firestoreDB.collection(storeName).doc(String(id)).get();
+                    if (doc.exists) {
+                        const data = doc.data();
+                        // Atualiza local
+                        const idx = localItems.findIndex(i => String(i.id) === String(id));
+                        if (idx >= 0) localItems[idx] = data; else localItems.push(data);
+                        lsSave(storeName, localItems);
+                        return data;
+                    }
+                } catch(e) {
+                    firestoreOnline = false;
+                }
             }
+            return localItem;
+        }
+
+        async function dbPut(storeName, data) {
+            const docId = (data.id !== undefined && data.id !== null) ? String(data.id) : Date.now().toString();
+            const dataToSave = { ...data, id: docId };
+
+            // Salva no localStorage imediatamente
+            const items = lsGetAll(storeName);
+            const idx = items.findIndex(i => String(i.id) === docId);
+            if (idx >= 0) items[idx] = dataToSave; else items.push(dataToSave);
+            lsSave(storeName, items);
+
+            // Sincroniza com Firestore em segundo plano
+            if (firestoreOnline && firestoreDB) {
+                try {
+                    await firestoreDB.collection(storeName).doc(docId).set(dataToSave, { merge: true });
+                } catch(e) {
+                    firestoreOnline = false;
+                    updateDBStatus('💾 Modo local (Firebase offline)');
+                }
+            }
+            return dataToSave;
+        }
+
+        async function dbAdd(storeName, data) {
+            const docId = (data.id !== undefined && data.id !== null) ? String(data.id) : Date.now().toString();
+            const dataToSave = { ...data, id: docId };
+
+            // Salva no localStorage imediatamente
+            const items = lsGetAll(storeName);
+            const idx = items.findIndex(i => String(i.id) === docId);
+            if (idx >= 0) items[idx] = dataToSave; else items.push(dataToSave);
+            lsSave(storeName, items);
+
+            // Sincroniza com Firestore
+            if (firestoreOnline && firestoreDB) {
+                try {
+                    await firestoreDB.collection(storeName).doc(docId).set(dataToSave);
+                } catch(e) {
+                    firestoreOnline = false;
+                }
+            }
+            return dataToSave;
+        }
+
+        async function dbDelete(storeName, id) {
+            // Remove do localStorage imediatamente
+            const items = lsGetAll(storeName).filter(i => String(i.id) !== String(id));
+            lsSave(storeName, items);
+
+            // Remove do Firestore em segundo plano
+            if (firestoreOnline && firestoreDB) {
+                try {
+                    await firestoreDB.collection(storeName).doc(String(id)).delete();
+                } catch(e) {
+                    firestoreOnline = false;
+                }
+            }
+            return true;
         }
 
         async function dbGetByIndex(storeName, indexName, value) {
@@ -2953,15 +3032,21 @@
                 'by_date': 'date',
                 'by_type': 'type'
             };
-            try {
-                const fieldName = indexToField[indexName] || indexName;
-                const snapshot = await firestoreDB.collection(storeName).where(fieldName, '==', value).limit(1).get();
-                if (snapshot.empty) return null;
-                return snapshot.docs[0].data();
-            } catch (error) {
-                console.error(`❌ Erro ao buscar por índice em ${storeName}:`, error);
-                return null;
+            const fieldName = indexToField[indexName] || indexName;
+
+            // Busca no localStorage
+            const localItems = lsGetAll(storeName);
+            const localItem = localItems.find(i => i[fieldName] === value) || null;
+
+            if (firestoreOnline && firestoreDB) {
+                try {
+                    const snapshot = await firestoreDB.collection(storeName).where(fieldName, '==', value).limit(1).get();
+                    if (!snapshot.empty) return snapshot.docs[0].data();
+                } catch(e) {
+                    firestoreOnline = false;
+                }
             }
+            return localItem;
         }
 
         // ===== DADOS INICIAIS =====
@@ -3572,21 +3657,16 @@
                     created: new Date().toISOString()
                 };
 
-                // Salva no Firestore em segundo plano (não bloqueia o login)
-                try {
-                    await dbPut(STORES.USERS, adminUser);
-                } catch (e) {
-                    console.warn('⚠️ Firestore indisponível, login local:', e.message);
-                }
-
+                // Login imediato — salva local sem depender do Firebase
                 localStorage.setItem('currentUserId', 'admin');
                 localStorage.setItem('nutribalance_user', JSON.stringify(adminUser));
-                
                 currentUser = adminUser;
                 updateUserInterface();
                 closeLoginModal();
-                
                 showNotification(currentLanguage === 'es' ? '✅ ¡Bienvenido, Administrador!' : '✅ Bem-vindo, Administrador!');
+
+                // Sincroniza com Firebase em segundo plano (sem bloquear)
+                dbPut(STORES.USERS, adminUser).catch(() => {});
             } else {
                 document.getElementById('adminError').textContent = currentLanguage === 'es' ? 'Usuario o contraseña incorrectos' : 'Usuário ou senha incorretos';
                 document.getElementById('adminError').style.display = 'block';
