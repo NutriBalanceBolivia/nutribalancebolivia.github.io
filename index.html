@@ -2902,30 +2902,34 @@
         }
 
         async function initDatabase() {
-            updateDBStatus('⏳ Iniciando...');
-            // Carrega dados locais imediatamente (nunca bloqueia)
-            await checkInitialData();
-            await loadInitialData();
+            updateDBStatus('⏳ Conectando...');
 
-            // Tenta conectar ao Firestore em segundo plano
+            // 1. Conecta ao Firestore PRIMEIRO — antes de qualquer outra coisa
             if (firestoreDB) {
                 try {
                     await Promise.race([
                         firestoreDB.collection(STORES.SETTINGS).doc('_ping').get(),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000))
                     ]);
                     firestoreOnline = true;
                     updateDBStatus('🔥 Firebase conectado');
-                    console.log('✅ Firestore online — sincronizando...');
-                    await syncLocalToFirestore();
-                    await loadInitialData(); // recarrega com dados da nuvem
+                    console.log('✅ Firestore online');
                 } catch (e) {
                     firestoreOnline = false;
                     updateDBStatus('💾 Modo local (Firebase offline)');
-                    console.warn('⚠️ Firestore offline, usando localStorage:', e.message);
+                    console.warn('⚠️ Firestore offline:', e.message);
                 }
             } else {
                 updateDBStatus('💾 Modo local');
+            }
+
+            // 2. Agora verifica/carrega dados (com firestoreOnline já definido)
+            await checkInitialData();
+            await loadInitialData();
+
+            // 3. Se online, sincroniza localStorage → Firestore em segundo plano
+            if (firestoreOnline) {
+                syncLocalToFirestore().catch(e => console.warn('Sync bg error:', e));
             }
         }
 
@@ -2971,7 +2975,6 @@
         }
 
         async function dbGet(storeName, id) {
-            // Busca no localStorage primeiro
             const localItems = lsGetAll(storeName);
             const localItem = localItems.find(i => String(i.id) === String(id)) || null;
 
@@ -2979,12 +2982,15 @@
                 try {
                     const doc = await firestoreDB.collection(storeName).doc(String(id)).get();
                     if (doc.exists) {
-                        const data = doc.data();
-                        // Atualiza local
+                        const remoteData = doc.data();
+                        // Merge: Firestore tem prioridade, mas preserva campos que só estão no local
+                        const merged = (storeName === STORES.SETTINGS && localItem)
+                            ? deepMerge(localItem, remoteData)
+                            : remoteData;
                         const idx = localItems.findIndex(i => String(i.id) === String(id));
-                        if (idx >= 0) localItems[idx] = data; else localItems.push(data);
+                        if (idx >= 0) localItems[idx] = merged; else localItems.push(merged);
                         lsSave(storeName, localItems);
-                        return data;
+                        return merged;
                     }
                 } catch(e) {
                     firestoreOnline = false;
@@ -2995,7 +3001,13 @@
 
         async function dbPut(storeName, data) {
             const docId = (data.id !== undefined && data.id !== null) ? String(data.id) : Date.now().toString();
-            const dataToSave = { ...data, id: docId };
+
+            // Para settings: sempre faz merge com o que já existe, nunca sobrescreve tudo
+            let dataToSave = { ...data, id: docId };
+            if (storeName === STORES.SETTINGS) {
+                const existing = lsGetAll(storeName).find(i => String(i.id) === docId) || {};
+                dataToSave = deepMerge(existing, dataToSave);
+            }
 
             // Salva no localStorage imediatamente
             const items = lsGetAll(storeName);
@@ -3013,6 +3025,26 @@
                 }
             }
             return dataToSave;
+        }
+
+        // Merge profundo: preserva todos os campos existentes, sobrescreve só os novos
+        function deepMerge(base, override) {
+            const result = { ...base };
+            for (const key of Object.keys(override)) {
+                if (
+                    override[key] !== null &&
+                    typeof override[key] === 'object' &&
+                    !Array.isArray(override[key]) &&
+                    base[key] !== null &&
+                    typeof base[key] === 'object' &&
+                    !Array.isArray(base[key])
+                ) {
+                    result[key] = deepMerge(base[key], override[key]);
+                } else {
+                    result[key] = override[key];
+                }
+            }
+            return result;
         }
 
         async function dbAdd(storeName, data) {
