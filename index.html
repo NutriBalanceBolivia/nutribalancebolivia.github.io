@@ -1,18 +1,121 @@
+<!--
+  ============================================================================
+  FIREBASE SECURITY RULES — EJEMPLO (NO APLICADO AUTOMÁTICAMENTE)
+  ============================================================================
+  Este archivo NO habilita reglas de seguridad. Mientras el proyecto de
+  Firebase esté en "modo de prueba" (o sin reglas), CUALQUIER PERSONA que
+  conozca la URL del proyecto puede leer y escribir en Firestore/Storage.
+  Antes de anunciar este sitio públicamente, pega las reglas de abajo en:
+  Firebase Console > Firestore Database > Reglas   (y > Storage > Reglas)
+
+  --- Firestore (ejemplo mínimo: lectura pública, escritura solo autenticada) ---
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /{document=**} {
+        allow read: if true;
+        allow write: if request.auth != null;
+      }
+    }
+  }
+
+  --- Storage (mismo criterio) ---
+  rules_version = '2';
+  service firebase.storage {
+    match /b/{bucket}/o {
+      match /{allPaths=**} {
+        allow read: if true;
+        allow write: if request.auth != null;
+      }
+    }
+  }
+
+  IMPORTANTE: el panel admin de este archivo usa una contraseña fija en el
+  JS del cliente (visible en el código fuente) solo para ocultar el panel
+  visualmente — NO es autenticación real. Para que "request.auth != null"
+  funcione de verdad, hay que migrar el login admin a Firebase Authentication
+  (Email/Password o Anónimo + Custom Claims) antes de aplicar las reglas de
+  arriba tal cual, o la escritura del admin dejará de funcionar.
+  ============================================================================
+-->
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NutriBalance - Comida Saludable Equilibrada</title>
-    
+    <title>NutriBalance - Marmitas Fitness Saludables en Santa Cruz, Bolivia</title>
+
+    <!-- ===== SEO BÁSICO ===== -->
+    <meta name="description" content="NutriBalance: marmitas fitness preparadas por nutricionistas en Santa Cruz de la Sierra, Bolivia. Pide por WhatsApp, paga con QR y recibe en casa.">
+    <meta name="robots" content="index, follow">
+    <!-- FIREBASE_CONFIG_HERE: reemplaza también esta URL canónica por el dominio real de producción -->
+    <link rel="canonical" href="https://www.nutribalance-bolivia.com/">
+
+    <!-- ===== OPEN GRAPH / TWITTER CARD ===== -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="NutriBalance">
+    <meta property="og:title" content="NutriBalance - Marmitas Fitness Saludables en Santa Cruz, Bolivia">
+    <meta property="og:description" content="Marmitas fitness preparadas por nutricionistas - solo calentar y disfrutar. Pide por WhatsApp.">
+    <meta property="og:image" content="https://i.imgur.com/ooI2lHp.jpeg">
+    <meta property="og:url" content="https://www.nutribalance-bolivia.com/">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="NutriBalance - Marmitas Fitness Saludables">
+    <meta name="twitter:description" content="Marmitas fitness preparadas por nutricionistas en Santa Cruz de la Sierra, Bolivia.">
+    <meta name="twitter:image" content="https://i.imgur.com/ooI2lHp.jpeg">
+
+    <!-- ===== JSON-LD: LocalBusiness ===== -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Store",
+      "name": "NutriBalance",
+      "image": "https://i.imgur.com/ooI2lHp.jpeg",
+      "description": "Marmitas fitness preparadas por nutricionistas en Santa Cruz de la Sierra, Bolivia.",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Santa Cruz de la Sierra",
+        "addressCountry": "BO"
+      },
+      "telephone": "+591 771 23456",
+      "priceRange": "Bs"
+    }
+    </script>
+    <!-- JSON-LD de productos individuales se inyecta dinámicamente en tiempo de ejecución, ver injectProductJsonLd() -->
+
+    <!-- ===== PRECONEXIONES (performance) ===== -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com">
+    <link rel="preconnect" href="https://www.gstatic.com">
+
+    <!-- Google Fonts (Poppins) con font-display:swap -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <!-- Font Awesome para ícones -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- ===== FIREBASE SDK ===== -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-    
+    <!-- ===== FIREBASE SDK =====
+         Se usa `defer` (no `async`) a propósito: el SDK "compat" de Firebase
+         depende de que app -> storage -> firestore se ejecuten EN ORDEN.
+         `defer` preserva el orden de ejecución y no bloquea el parseo del
+         HTML; `async` no garantiza orden y podría romper la inicialización. -->
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+    <!-- Polyfill simple de IntersectionObserver para navegadores muy antiguos -->
+    <script>
+      if (!('IntersectionObserver' in window)) {
+        window.IntersectionObserver = function (callback) {
+          return {
+            observe: function (el) { callback([{ isIntersecting: true, target: el }]); },
+            unobserve: function () {},
+            disconnect: function () {}
+          };
+        };
+      }
+    </script>
+
     <style>
         /* ===== VARIÁVEIS & RESET ===== */
         :root {
@@ -35,7 +138,7 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            font-family: 'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif;
         }
         
         body {
@@ -46,48 +149,7 @@
             overflow-x: hidden;
         }
         
-        /* ===== BANDEIRAS OFICIAIS ===== */
-        .flags {
-            position: fixed;
-            top: 5px;
-            right: 15px;
-            display: flex;
-            gap: 6px;
-            z-index: 2000;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 3px;
-            border-radius: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .flag {
-            width: 28px;
-            height: 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: var(--transition);
-            border: 2px solid transparent;
-            background-size: cover;
-            background-position: center;
-        }
-        
-        .flag:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
-        .flag.active {
-            border-color: var(--primary);
-            transform: scale(1.1);
-        }
-        
-        .flag-br {
-            background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Flag_of_Brazil.svg/320px-Flag_of_Brazil.svg.png');
-        }
-        
-        .flag-bo {
-            background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Flag_of_Bolivia.svg/320px-Flag_of_Bolivia.svg.png');
-        }
+        /* Selector de idioma removido: sitio único en Español (ES-BO) */
         
         /* ===== HEADER EXTREMAMENTE COMPACTO ===== */
         .header {
@@ -923,6 +985,67 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
             position: relative;
+        }
+
+        /* ===== SKELETON LOADERS (mientras cargan productos/combos) ===== */
+        .skeleton-card {
+            height: 320px;
+            border-radius: var(--radius);
+            background: linear-gradient(90deg, #ececec 25%, #f5f5f5 37%, #ececec 63%);
+            background-size: 400% 100%;
+            animation: skeleton-loading 1.4s ease infinite;
+        }
+        @keyframes skeleton-loading {
+            0% { background-position: 100% 50%; }
+            100% { background-position: 0 50%; }
+        }
+
+        /* ===== ACCESIBILIDAD: skip link, foco visible, texto solo para lectores de pantalla ===== */
+        .skip-link {
+            position: absolute;
+            left: -999px;
+            top: 0;
+            background: var(--primary);
+            color: #fff;
+            padding: 10px 16px;
+            z-index: 9999;
+            border-radius: 0 0 8px 0;
+        }
+        .skip-link:focus {
+            left: 0;
+        }
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        a:focus-visible,
+        button:focus-visible,
+        input:focus-visible,
+        textarea:focus-visible,
+        select:focus-visible,
+        [tabindex]:focus-visible {
+            outline: 3px solid var(--secondary);
+            outline-offset: 2px;
+        }
+
+        /* ===== BANNER DEMO ADMIN ===== */
+        .admin-demo-banner {
+            position: sticky;
+            top: 0;
+            z-index: 3000;
+            background: var(--warning);
+            color: #3a2e00;
+            font-weight: 600;
+            font-size: 13px;
+            padding: 8px 14px;
+            text-align: center;
         }
         
         .product-card::before {
@@ -1811,10 +1934,12 @@
     </style>
 </head>
 <body>
-    <!-- ===== BANDEIRAS OFICIAIS ===== -->
-    <div class="flags">
-        <div class="flag flag-br" title="Português (Brasil)" onclick="changeLanguage('pt')"></div>
-        <div class="flag flag-bo active" title="Español (Bolivia)" onclick="changeLanguage('es')"></div>
+    <a class="skip-link" href="#mainContent">Saltar al contenido principal</a>
+
+    <!-- ===== BANNER DEMO ADMIN (aviso de seguridad) ===== -->
+    <div id="adminDemoBanner" class="admin-demo-banner" role="alert" style="display:none;">
+        ⚠️ Panel de administración en modo DEMO: escribe directamente en Firestore/Storage sin backend intermedio.
+        Úsalo solo en un entorno controlado y aplica las Firebase Security Rules antes de producción real.
     </div>
 
     <!-- ===== STATUS DO BANCO DE DADOS ===== -->
@@ -1834,16 +1959,16 @@
         <div class="logo" onclick="goToHome()">
             <div class="logo-icon">
                 <!-- LOGO MANTIDA NO TAMANHO ORIGINAL - 420x130px -->
-                <img src="https://i.imgur.com/ooI2lHp.jpeg" alt="NutriBalance FITNESS" id="mainLogo">
+                <img src="https://i.imgur.com/ooI2lHp.jpeg" alt="NutriBalance FITNESS" id="mainLogo" fetchpriority="high" decoding="async">
             </div>
             <div class="logo-text">Nutri<span>Balance</span></div>
         </div>
         
         <nav class="nav">
-            <a class="nav-link" data-section="inicio" data-es="Inicio" data-pt="Início" onclick="goToSection('inicio')">Inicio</a>
-            <a class="nav-link" data-section="cardapio" data-es="Menú" data-pt="Cardápio" onclick="goToSection('cardapio')">Menú</a>
-            <a class="nav-link" data-section="combos" data-es="Combos" data-pt="Combos" onclick="goToSection('combos')">Combos</a>
-            <a onclick="openCartPage()" data-es="Carrito" data-pt="Carrinho">Carrito</a>
+            <a class="nav-link" data-section="inicio" data-es="Inicio" onclick="goToSection('inicio')">Inicio</a>
+            <a class="nav-link" data-section="cardapio" data-es="Menú" onclick="goToSection('cardapio')">Menú</a>
+            <a class="nav-link" data-section="combos" data-es="Combos" onclick="goToSection('combos')">Combos</a>
+            <a onclick="openCartPage()" data-es="Carrito">Carrito</a>
         </nav>
         
         <div class="user-area">
@@ -1853,7 +1978,7 @@
             
             <div id="userButtons">
                 <button class="login-btn" onclick="openLoginModal()">
-                    👤 <span data-es="Iniciar Sesión" data-pt="Entrar">Iniciar Sesión</span>
+                    👤 <span data-es="Iniciar Sesión">Iniciar Sesión</span>
                 </button>
             </div>
             
@@ -1864,16 +1989,15 @@
     </header>
 
     <!-- ===== PÁGINAS PRINCIPAIS ===== -->
-    <div id="mainContent">
+    <div id="mainContent" role="main" tabindex="-1">
         <!-- ===== HOME PAGE ===== -->
         <section class="hero" id="inicio">
             <div class="hero-content">
                 <div class="hero-text">
-                    <h1 data-es="Equilibrio Nutricional en Cada Bocado" data-pt="Equilíbrio Nutricional em Cada Mordida">
+                    <h1 data-es="Equilibrio Nutricional en Cada Bocado">
                         Equilibrio Nutricional en Cada Bocado
                     </h1>
-                    <p data-es="Marmitas fitness preparadas por nutricionistas - solo calentar y disfrutar" 
-                       data-pt="Marmitas fitness preparadas por nutricionistas - apenas aquecer e aproveitar">
+                    <p data-es="Marmitas fitness preparadas por nutricionistas - solo calentar y disfrutar">
                         Marmitas fitness preparadas por nutricionistas - solo calentar y disfrutar
                     </p>
                     
@@ -1888,10 +2012,10 @@
                     
                     <div class="hero-buttons">
                         <button class="btn btn-primary" onclick="goToSection('cardapio')">
-                            🍽️ <span data-es="Ver Menú" data-pt="Ver Cardápio">Ver Menú</span>
+                            🍽️ <span data-es="Ver Menú">Ver Menú</span>
                         </button>
                         <button class="btn btn-secondary" onclick="goToSection('combos')">
-                            🎁 <span data-es="Combos Promocionales" data-pt="Combos Promocionais">Combos Promocionales</span>
+                            🎁 <span data-es="Combos Promocionales">Combos Promocionales</span>
                         </button>
                     </div>
                 </div>
@@ -1924,11 +2048,14 @@
         <!-- ===== CARDÁPIO / MENÚ ===== -->
         <section class="products-section" id="cardapio">
             <div class="container">
-                <h2 class="section-title" data-es="🥗 Nuestro Menú" data-pt="🥗 Nosso Cardápio">
+                <h2 class="section-title" data-es="🥗 Nuestro Menú">
                     🥗 Nuestro Menú
                 </h2>
-                <div class="products-grid" id="productsGrid">
+                <div class="products-grid" id="productsGrid" role="list" aria-label="Menú de productos">
                     <!-- Produtos serão carregados via JavaScript -->
+                    <div class="skeleton-card" aria-hidden="true"></div>
+                    <div class="skeleton-card" aria-hidden="true"></div>
+                    <div class="skeleton-card" aria-hidden="true"></div>
                 </div>
             </div>
         </section>
@@ -1936,11 +2063,13 @@
         <!-- ===== COMBOS ===== -->
         <section class="products-section" id="combos" style="background: var(--light);">
             <div class="container">
-                <h2 class="section-title" data-es="🎁 Combos Promocionales" data-pt="🎁 Combos Promocionais">
+                <h2 class="section-title" data-es="🎁 Combos Promocionales">
                     🎁 Combos Promocionales
                 </h2>
-                <div class="products-grid" id="combosGrid">
+                <div class="products-grid" id="combosGrid" role="list" aria-label="Combos promocionales">
                     <!-- Combos serão carregados via JavaScript -->
+                    <div class="skeleton-card" aria-hidden="true"></div>
+                    <div class="skeleton-card" aria-hidden="true"></div>
                 </div>
             </div>
         </section>
@@ -1949,7 +2078,7 @@
     <!-- ===== PÁGINA DO CARRINHO ===== -->
     <div class="cart-page" id="cartPage">
         <div class="cart-container">
-            <h2 class="section-title" data-es="🛒 Mi Carrito" data-pt="🛒 Meu Carrinho">🛒 Mi Carrito</h2>
+            <h2 class="section-title" data-es="🛒 Mi Carrito">🛒 Mi Carrito</h2>
             
             <div class="cart-items" id="cartPageItems">
                 <!-- Itens do carrinho aparecem aqui -->
@@ -1957,28 +2086,28 @@
             
             <div class="cart-summary">
                 <div class="summary-row">
-                    <span data-es="Subtotal" data-pt="Subtotal">Subtotal</span>
+                    <span data-es="Subtotal">Subtotal</span>
                     <span id="cartPageSubtotal">Bs 0,00</span>
                 </div>
                 <div class="summary-row">
-                    <span id="deliveryLabel" data-es="Entrega" data-pt="Entrega">Entrega</span>
-                    <span id="cartPageDelivery" data-es="Calcular via WhatsApp" data-pt="Calcular via WhatsApp">Calcular via WhatsApp</span>
+                    <span id="deliveryLabel" data-es="Entrega">Entrega</span>
+                    <span id="cartPageDelivery" data-es="Calcular via WhatsApp">Calcular via WhatsApp</span>
                 </div>
                 <div class="summary-row summary-total">
-                    <span data-es="Total" data-pt="Total">Total</span>
+                    <span data-es="Total">Total</span>
                     <span id="cartPageTotal">Bs 0,00</span>
                 </div>
                 
                 <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" onclick="openCheckout()">
-                    <i class="fas fa-lock"></i> <span data-es="Finalizar Pedido" data-pt="Finalizar Pedido">Finalizar Pedido</span>
+                    <i class="fas fa-lock"></i> <span data-es="Finalizar Pedido">Finalizar Pedido</span>
                 </button>
                 
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
                     <button class="btn btn-secondary" style="flex: 1;" onclick="goToSection('cardapio')">
-                        🍽️ <span data-es="Menú" data-pt="Cardápio">Menú</span>
+                        🍽️ <span data-es="Menú">Menú</span>
                     </button>
                     <button class="btn btn-secondary" style="flex: 1;" onclick="goToSection('combos')">
-                        🎁 <span data-es="Combos" data-pt="Combos">Combos</span>
+                        🎁 <span data-es="Combos">Combos</span>
                     </button>
                 </div>
             </div>
@@ -1991,26 +2120,25 @@
             <div class="checkout-steps">
                 <div class="step completed">
                     <div class="step-number">1</div>
-                    <div class="step-label" data-es="Carrito" data-pt="Carrinho">Carrito</div>
+                    <div class="step-label" data-es="Carrito">Carrito</div>
                 </div>
                 <div class="step active">
                     <div class="step-number">2</div>
-                    <div class="step-label" data-es="Localización" data-pt="Localização">Localización</div>
+                    <div class="step-label" data-es="Localización">Localización</div>
                 </div>
                 <div class="step">
                     <div class="step-number">3</div>
-                    <div class="step-label" data-es="Pago" data-pt="Pagamento">Pago</div>
+                    <div class="step-label" data-es="Pago">Pago</div>
                 </div>
             </div>
             
             <div class="qr-code-container">
-                <h3><i class="fas fa-qrcode"></i> <span data-es="Pagamento apenas com QR Code" data-pt="Pagamento apenas com QR Code">Pagamento apenas con QR Code</span></h3>
+                <h3><i class="fas fa-qrcode"></i> <span data-es="Pagamento apenas com QR Code">Pagamento apenas con QR Code</span></h3>
                 
                 <div style="background: var(--light); padding: 20px; border-radius: var(--radius); margin: 20px 0; text-align: left;">
                     <p style="color: var(--primary); font-weight: 600;">
                         <i class="fas fa-info-circle"></i> 
-                        <span data-es="Reciba el código QR del valor total después de enviar su ubicación por WhatsApp." 
-                              data-pt="Receba o código QR do valor total depois de enviar sua localização pelo WhatsApp.">
+                        <span data-es="Reciba el código QR del valor total después de enviar su ubicación por WhatsApp.">
                             Reciba el código QR del valor total después de enviar su ubicación por WhatsApp.
                         </span>
                     </p>
@@ -2018,80 +2146,73 @@
                 
                 <!-- Campo de endereço para entrega -->
                 <div style="margin: 20px 0; text-align: left;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark);">
+                    <label for="deliveryLocation" style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark);">
                         <i class="fas fa-map-marker-alt"></i> 
-                        <span data-es="Localización para Entrega" data-pt="Localização para Entrega">Localización para Entrega</span>
+                        <span data-es="Localización para Entrega">Localización para Entrega</span>
                     </label>
                     <textarea id="deliveryLocation" 
                               placeholder="Ingresa tu dirección completa (calle, número, barrio, ciudad)..."
+                              aria-describedby="deliveryLocationHelp"
                               style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: var(--radius); min-height: 100px; resize: vertical;"></textarea>
-                    <small style="color: var(--gray); display: block; margin-top: 5px;">
-                        <span data-es="Esta información se enviará por WhatsApp para calcular la entrega y enviarte el código QR para pago." 
-                              data-pt="Esta informação será enviada por WhatsApp para calcular a entrega e enviar o código QR para pagamento.">
+                    <small id="deliveryLocationHelp" style="color: var(--gray); display: block; margin-top: 5px;">
+                        <span data-es="Esta información se enviará por WhatsApp para calcular la entrega y enviarte el código QR para pago.">
                             Esta información se enviará por WhatsApp para calcular la entrega y enviarte el código QR para pago.
                         </span>
                     </small>
                 </div>
                 
                 <div class="pix-instructions">
-                    <h4><i class="fas fa-credit-card"></i> <span data-es="Cómo pagar:" data-pt="Como pagar:">Cómo pagar:</span></h4>
+                    <h4><i class="fas fa-credit-card"></i> <span data-es="Cómo pagar:">Cómo pagar:</span></h4>
                     <ol>
                         <li>
-                            <span data-es="Después de recibir el valor total de la entrega por WhatsApp" 
-                                  data-pt="Depois que receber o valor total da entrega pelo WhatsApp">
+                            <span data-es="Después de recibir el valor total de la entrega por WhatsApp">
                                 Después de recibir el valor total de la entrega por WhatsApp
                             </span>
                         </li>
                         <li>
-                            <span data-es="Abra su aplicación de pagos" 
-                                  data-pt="Abra seu aplicativo de pagamentos">
+                            <span data-es="Abra su aplicación de pagos">
                                 Abra su aplicación de pagos
                             </span>
                         </li>
                         <li>
-                            <span data-es="Seleccione 'Pagar con QR'" 
-                                  data-pt="Selecione 'Pagar com QR'">
+                            <span data-es="Seleccione 'Pagar con QR'">
                                 Seleccione 'Pagar con QR'
                             </span>
                         </li>
                         <li>
-                            <span data-es="Escanee el código QR enviado por WhatsApp" 
-                                  data-pt="Escaneie o código QR enviado pelo WhatsApp">
+                            <span data-es="Escanee el código QR enviado por WhatsApp">
                                 Escanee el código QR enviado por WhatsApp
                             </span>
                         </li>
                         <li>
-                            <span data-es="Confirme el pago" 
-                                  data-pt="Confirme o pagamento">
+                            <span data-es="Confirme el pago">
                                 Confirme el pago
                             </span>
                         </li>
                         <li>
-                            <span data-es="Envíe el comprobante por WhatsApp" 
-                                  data-pt="Envie o comprovante por WhatsApp">
+                            <span data-es="Envíe el comprobante por WhatsApp">
                                 Envíe el comprobante por WhatsApp
                             </span>
                         </li>
                         <li>
-                            <span data-es="¡Listo! Solo espere que llegue su pedido" 
-                                  data-pt="Pronto! Só aguardar seu pedido chegar">
+                            <span data-es="¡Listo! Solo espere que llegue su pedido">
                                 ¡Listo! Solo espere que llegue su pedido
                             </span>
                         </li>
                     </ol>
                 </div>
                 
-                <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" onclick="sendOrderToWhatsApp()" id="sendOrderBtn">
-                    <i class="fab fa-whatsapp"></i> 
-                    <span data-es="Enviar Localización y Finalizar Pedido" data-pt="Enviar Localização e Finalizar Pedido">Enviar Localización y Finalizar Pedido</span>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" onclick="sendOrderToWhatsApp()" id="sendOrderBtn" aria-label="Enviar localización y finalizar pedido por WhatsApp">
+                    <i class="fab fa-whatsapp" aria-hidden="true"></i> 
+                    <span data-es="Enviar Localización y Finalizar Pedido">Enviar Localización y Finalizar Pedido</span>
                 </button>
                 
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
                     <button class="btn btn-secondary" style="flex: 1;" onclick="goToCartPage()">
-                        🛒 <span data-es="Volver al Carrito" data-pt="Voltar ao Carrinho">Volver al Carrito</span>
+                        🛒 <span data-es="Volver al Carrito">Volver al Carrito</span>
                     </button>
                     <button class="btn btn-secondary" style="flex: 1;" onclick="goToSection('cardapio')">
-                        🍽️ <span data-es="Menú" data-pt="Cardápio">Menú</span>
+                        🍽️ <span data-es="Menú">Menú</span>
                     </button>
                 </div>
             </div>
@@ -2101,29 +2222,29 @@
     <!-- ===== PÁGINA DE CLIENTES (ADMIN) ===== -->
     <div class="clients-section" id="clientsSection">
         <div class="clients-container">
-            <h2 class="section-title">👥 <span data-es="Gestión de Clientes" data-pt="Gestão de Clientes">Gestión de Clientes</span></h2>
+            <h2 class="section-title">👥 <span data-es="Gestión de Clientes">Gestión de Clientes</span></h2>
             
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-value" id="totalClients">0</div>
-                    <div class="stat-label" data-es="Clientes Registrados" data-pt="Clientes Registrados">Clientes Registrados</div>
+                    <div class="stat-label" data-es="Clientes Registrados">Clientes Registrados</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="totalOrders">0</div>
-                    <div class="stat-label" data-es="Pedidos Totales" data-pt="Pedidos Totais">Pedidos Totales</div>
+                    <div class="stat-label" data-es="Pedidos Totales">Pedidos Totales</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="totalRevenue">Bs 0,00</div>
-                    <div class="stat-label" data-es="Ingresos Totales" data-pt="Receita Total">Ingresos Totales</div>
+                    <div class="stat-label" data-es="Ingresos Totales">Ingresos Totales</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="birthdaysCount">0</div>
-                    <div class="stat-label" data-es="Cumpleaños este mes" data-pt="Aniversários este mês">Cumpleaños este mes</div>
+                    <div class="stat-label" data-es="Cumpleaños este mes">Cumpleaños este mes</div>
                 </div>
             </div>
             
             <div class="filters">
-                <input type="text" id="searchClient" class="filter-input" placeholder="Buscar cliente..." data-es="Buscar cliente..." data-pt="Buscar cliente...">
+                <input type="text" id="searchClient" class="filter-input" placeholder="Buscar cliente..." data-es="Buscar cliente...">
                 <select id="filterMonth" class="filter-input">
                     <option value="">Todos los meses</option>
                     <option value="1">Enero</option>
@@ -2140,23 +2261,23 @@
                     <option value="12">Diciembre</option>
                 </select>
                 <button class="btn btn-primary" onclick="loadClients()">
-                    🔍 <span data-es="Filtrar" data-pt="Filtrar">Filtrar</span>
+                    🔍 <span data-es="Filtrar">Filtrar</span>
                 </button>
                 <button class="btn btn-secondary" onclick="showRankingsPage()">
-                    📊 <span data-es="Ver Rankings" data-pt="Ver Rankings">Ver Rankings</span>
+                    📊 <span data-es="Ver Rankings">Ver Rankings</span>
                 </button>
                 <button class="btn btn-secondary" onclick="exportClientsReport()">
-                    📥 <span data-es="Exportar Reporte" data-pt="Exportar Relatório">Exportar Reporte</span>
+                    📥 <span data-es="Exportar Reporte">Exportar Reporte</span>
                 </button>
             </div>
             
             <div class="clients-table">
                 <div class="table-header">
-                    <div data-es="Nombre" data-pt="Nome">Nombre</div>
-                    <div data-es="Email" data-pt="Email">Email</div>
-                    <div data-es="Pedidos" data-pt="Pedidos">Pedidos</div>
-                    <div data-es="Total Gastado" data-pt="Total Gasto">Total Gastado</div>
-                    <div data-es="Cumpleaños" data-pt="Aniversário">Cumpleaños</div>
+                    <div data-es="Nombre">Nombre</div>
+                    <div data-es="Email">Email</div>
+                    <div data-es="Pedidos">Pedidos</div>
+                    <div data-es="Total Gastado">Total Gastado</div>
+                    <div data-es="Cumpleaños">Cumpleaños</div>
                 </div>
                 <div id="clientsTableBody">
                     <!-- Clientes serão carregados aqui -->
@@ -2184,10 +2305,10 @@
             
             <div style="display: flex; gap: 10px; margin-top: 20px;">
                 <button class="btn btn-secondary" style="flex: 1;" onclick="openAdmin()">
-                    ⚙️ <span data-es="Volver al Panel" data-pt="Voltar ao Painel">Volver al Panel</span>
+                    ⚙️ <span data-es="Volver al Panel">Volver al Panel</span>
                 </button>
                 <button class="btn btn-primary" style="flex: 1;" onclick="loadClients()">
-                    🔄 <span data-es="Actualizar" data-pt="Atualizar">Actualizar</span>
+                    🔄 <span data-es="Actualizar">Actualizar</span>
                 </button>
             </div>
         </div>
@@ -2200,12 +2321,11 @@
                 <!-- LOGO NO FOOTER - TAMBÉM MAIOR -->
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
                     <div class="logo-icon" style="width: 260px; height: 85px; background: transparent;">
-                        <img src="https://i.imgur.com/ooI2lHp.jpeg" alt="NutriBalance FITNESS">
+                        <img src="https://i.imgur.com/ooI2lHp.jpeg" alt="NutriBalance FITNESS" loading="lazy" decoding="async">
                     </div>
                     <h3 style="margin: 0; font-size: 1.5rem; display: none;">🍃 NutriBalance</h3>
                 </div>
-                <p id="footerDescription" data-es="Tu equilibrio nutricional entregado en casa" 
-                   data-pt="Seu equilíbrio nutricional entregue em casa">
+                <p id="footerDescription" data-es="Tu equilibrio nutricional entregado en casa">
                     Tu equilibrio nutricional entregado en casa
                 </p>
                 <div class="social-links">
@@ -2217,37 +2337,36 @@
             </div>
             
             <div class="footer-col">
-                <h3 data-es="Menú" data-pt="Menu">Menú</h3>
+                <h3 data-es="Menú">Menú</h3>
                 <ul class="footer-links">
-                    <li><a onclick="goToSection('inicio')"><i class="fas fa-chevron-right"></i> <span data-es="Inicio" data-pt="Início">Inicio</span></a></li>
-                    <li><a onclick="goToSection('cardapio')"><i class="fas fa-chevron-right"></i> <span data-es="Menú" data-pt="Cardápio">Menú</span></a></li>
-                    <li><a onclick="goToSection('combos')"><i class="fas fa-chevron-right"></i> <span data-es="Combos" data-pt="Combos">Combos</span></a></li>
+                    <li><a onclick="goToSection('inicio')"><i class="fas fa-chevron-right"></i> <span data-es="Inicio">Inicio</span></a></li>
+                    <li><a onclick="goToSection('cardapio')"><i class="fas fa-chevron-right"></i> <span data-es="Menú">Menú</span></a></li>
+                    <li><a onclick="goToSection('combos')"><i class="fas fa-chevron-right"></i> <span data-es="Combos">Combos</span></a></li>
                 </ul>
             </div>
             
             <div class="footer-col">
-                <h3 data-es="Contacto" data-pt="Contato">Contacto</h3>
+                <h3 data-es="Contacto">Contacto</h3>
                 <ul class="footer-links">
-                    <li><a href="#" id="footerWhatsapp"><i class="fab fa-whatsapp"></i> <span data-es="WhatsApp" data-pt="WhatsApp">WhatsApp</span>: <span id="footerWhatsappNumber">+591 771 23456</span></a></li>
+                    <li><a href="#" id="footerWhatsapp"><i class="fab fa-whatsapp"></i> <span data-es="WhatsApp">WhatsApp</span>: <span id="footerWhatsappNumber">+591 771 23456</span></a></li>
                     <li><a href="/cdn-cgi/l/email-protection#0c6463606d4c6279787e656e6d606d626f69226f6361" id="footerEmail"><i class="fas fa-envelope"></i> <span id="footerEmailText"><span class="__cf_email__" data-cfemail="97fff8fbf6d7f9e2e3e5fef5f6fbf6f9f4f2b9f4f8fa">[email&#160;protected]</span></span></a></li>
-                    <li><a href="#" id="footerAddress"><i class="fas fa-map-marker-alt"></i> <span data-es="Santa Cruz de la Sierra, Bolivia" data-pt="Santa Cruz de la Sierra, Bolívia" id="footerAddressText">Santa Cruz de la Sierra, Bolivia</span></a></li>
+                    <li><a href="#" id="footerAddress"><i class="fas fa-map-marker-alt"></i> <span data-es="Santa Cruz de la Sierra, Bolivia" id="footerAddressText">Santa Cruz de la Sierra, Bolivia</span></a></li>
                 </ul>
             </div>
             
             <div class="footer-col">
-                <h3 data-es="Métodos de Pago" data-pt="Métodos de Pagamento">Métodos de Pago</h3>
+                <h3 data-es="Métodos de Pago">Métodos de Pago</h3>
                 <ul class="footer-links">
-                    <li><a href="#"><i class="fas fa-qrcode"></i> <span data-es="QR Code" data-pt="QR Code">QR Code</span></a></li>
+                    <li><a href="#"><i class="fas fa-qrcode"></i> <span data-es="QR Code">QR Code</span></a></li>
                 </ul>
             </div>
         </div>
         
         <div class="footer-bottom">
-            <p id="footerCopyright">© 2026 NutriBalance. <span data-es="Todos los derechos reservados" data-pt="Todos os direitos reservados">Todos los derechos reservados</span>.</p>
+            <p id="footerCopyright">© 2026 NutriBalance. <span data-es="Todos los derechos reservados">Todos los derechos reservados</span>.</p>
             <p style="margin-top: 10px; font-size: 12px; color: #95a5a6;">
                 <i class="fas fa-exclamation-circle"></i> 
-                <span data-es="Una alimentación equilibrada forma parte de un estilo de vida saludable. Consulte siempre a un nutricionista." 
-                      data-pt="Uma alimentação equilibrada faz parte de um estilo de vida saudável. Consulte sempre um nutricionista.">
+                <span data-es="Una alimentación equilibrada forma parte de un estilo de vida saludable. Consulte siempre a un nutricionista.">
                     Una alimentación equilibrada forma parte de un estilo de vida saludable. Consulte siempre a un nutricionista.
                 </span>
             </p>
@@ -2255,18 +2374,18 @@
     </footer>
 
     <!-- ===== WHATSAPP - CORREÇÃO DEFINITIVA ===== -->
-    <a href="#" class="whatsapp-float" target="_blank" id="whatsappFloat">
-        <i class="fab fa-whatsapp"></i>
+    <a href="#" class="whatsapp-float" target="_blank" id="whatsappFloat" aria-label="Contactar por WhatsApp" rel="noopener">
+        <i class="fab fa-whatsapp" aria-hidden="true"></i>
     </a>
 
     <!-- ===== MENU MOBILE ===== -->
     <div class="mobile-nav-overlay" id="mobileNavOverlay" onclick="closeMobileMenu()"></div>
     <div class="mobile-nav-menu" id="mobileNavMenu">
         <button class="mobile-nav-close" onclick="closeMobileMenu()">&times;</button>
-        <a onclick="closeMobileMenu(); goToSection('inicio')" data-es="Inicio" data-pt="Início">🏠 Início</a>
-        <a onclick="closeMobileMenu(); goToSection('cardapio')" data-es="Menú" data-pt="Cardápio">🥗 Cardápio</a>
-        <a onclick="closeMobileMenu(); goToSection('combos')" data-es="Combos" data-pt="Combos">🎁 Combos</a>
-        <a onclick="closeMobileMenu(); openCartPage()" data-es="Carrito" data-pt="Carrinho">🛒 Carrinho</a>
+        <a onclick="closeMobileMenu(); goToSection('inicio')" data-es="Inicio">🏠 Início</a>
+        <a onclick="closeMobileMenu(); goToSection('cardapio')" data-es="Menú">🥗 Cardápio</a>
+        <a onclick="closeMobileMenu(); goToSection('combos')" data-es="Combos">🎁 Combos</a>
+        <a onclick="closeMobileMenu(); openCartPage()" data-es="Carrito">🛒 Carrinho</a>
     </div>
 
     <!-- ===== MODAL DE LOGIN ===== -->
@@ -2279,13 +2398,13 @@
                 <div style="width:56px;height:56px;background:linear-gradient(135deg,var(--secondary),var(--primary));border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;">
                     <i class="fas fa-user" style="color:#fff;font-size:22px;"></i>
                 </div>
-                <h2 class="login-title" style="margin-bottom:4px;" data-es="Bienvenido" data-pt="Bem-vindo">Bem-vindo</h2>
-                <p style="color:var(--gray);font-size:14px;" data-es="Ingresa tus credenciales para continuar" data-pt="Insira suas credenciais para continuar">Insira suas credenciais para continuar</p>
+                <h2 class="login-title" style="margin-bottom:4px;" data-es="Bienvenido">Bem-vindo</h2>
+                <p style="color:var(--gray);font-size:14px;" data-es="Ingresa tus credenciales para continuar">Insira suas credenciais para continuar</p>
             </div>
 
             <div class="login-form" id="unifiedLogin">
                 <div class="form-group">
-                    <label class="form-label" data-es="Email o Usuario" data-pt="Email ou Usuário">Email ou Usuário</label>
+                    <label class="form-label" for="unifiedIdentifier" data-es="Email o Usuario">Email ou Usuário</label>
                     <div style="position:relative;">
                         <i class="fas fa-envelope" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:14px;"></i>
                         <input type="text" class="form-input" id="unifiedIdentifier" placeholder="email@exemplo.com" style="padding-left:40px;" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('unifiedPassword').focus()">
@@ -2293,7 +2412,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" data-es="Contraseña" data-pt="Senha">Senha</label>
+                    <label class="form-label" for="unifiedPassword" data-es="Contraseña">Senha</label>
                     <div style="position:relative;">
                         <i class="fas fa-lock" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:14px;"></i>
                         <input type="password" class="form-input" id="unifiedPassword" placeholder="••••••••" style="padding-left:40px;padding-right:44px;" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginUnified()">
@@ -2309,18 +2428,18 @@
 
                 <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="loginUnified()">
                     <i class="fas fa-sign-in-alt"></i>
-                    <span data-es="Entrar" data-pt="Entrar">Entrar</span>
+                    <span data-es="Entrar">Entrar</span>
                 </button>
 
                 <div style="display:flex;align-items:center;gap:10px;margin:18px 0;">
                     <hr style="flex:1;border:none;border-top:1px solid #e0e0e0;">
-                    <span style="color:var(--gray);font-size:13px;" data-es="¿Primera vez?" data-pt="Primeira vez?">Primeira vez?</span>
+                    <span style="color:var(--gray);font-size:13px;" data-es="¿Primera vez?">Primeira vez?</span>
                     <hr style="flex:1;border:none;border-top:1px solid #e0e0e0;">
                 </div>
 
                 <button class="btn btn-secondary" style="width:100%;" onclick="openRegisterModal()">
                     <i class="fas fa-user-plus"></i>
-                    <span data-es="Crear cuenta" data-pt="Criar conta">Criar conta</span>
+                    <span data-es="Crear cuenta">Criar conta</span>
                 </button>
             </div>
         </div>
@@ -2330,59 +2449,59 @@
     <div class="register-modal" id="registerModal">
         <div class="login-content">
             <button class="close-modal" onclick="closeRegisterModal()">&times;</button>
-            <h2 class="login-title" data-es="Crear Cuenta" data-pt="Criar Conta">Crear Cuenta</h2>
+            <h2 class="login-title" data-es="Crear Cuenta">Crear Cuenta</h2>
             
             <div class="login-tabs">
-                <button class="login-tab active" onclick="openRegisterTab('personal')" data-es="Datos Personales" data-pt="Dados Pessoais">Datos Personales</button>
+                <button class="login-tab active" onclick="openRegisterTab('personal')" data-es="Datos Personales">Datos Personales</button>
             </div>
             
             <form id="registerForm" onsubmit="registerClient(event)">
                 <div class="form-group">
-                    <label class="form-label" data-es="Nombre Completo" data-pt="Nome Completo">Nombre Completo</label>
+                    <label class="form-label" for="registerName" data-es="Nombre Completo">Nombre Completo</label>
                     <input type="text" class="form-input" id="registerName" required>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Email" data-pt="Email">Email</label>
+                    <label class="form-label" for="registerEmail" data-es="Email">Email</label>
                     <input type="email" class="form-input" id="registerEmail" required>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Teléfono" data-pt="Telefone">Teléfono</label>
+                    <label class="form-label" for="registerPhone" data-es="Teléfono">Teléfono</label>
                     <input type="tel" class="form-input" id="registerPhone" required>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Fecha de Nacimiento" data-pt="Data de Nascimento">Fecha de Nacimiento</label>
+                    <label class="form-label" for="registerBirthday" data-es="Fecha de Nacimiento">Fecha de Nacimiento</label>
                     <input type="date" class="form-input" id="registerBirthday" required>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Contraseña" data-pt="Senha">Contraseña</label>
+                    <label class="form-label" for="registerPassword" data-es="Contraseña">Contraseña</label>
                     <input type="password" class="form-input" id="registerPassword" required minlength="6">
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Confirmar Contraseña" data-pt="Confirmar Senha">Confirmar Contraseña</label>
+                    <label class="form-label" for="registerConfirmPassword" data-es="Confirmar Contraseña">Confirmar Contraseña</label>
                     <input type="password" class="form-input" id="registerConfirmPassword" required minlength="6">
                 </div>
                 
                 <p class="login-error" id="registerError"></p>
                 
                 <button type="submit" class="btn btn-primary" style="width: 100%;" id="registerBtn">
-                    <span data-es="Crear Cuenta" data-pt="Criar Conta">Crear Cuenta</span>
+                    <span data-es="Crear Cuenta">Crear Cuenta</span>
                 </button>
             </form>
             
             <p style="text-align: center; margin-top: 20px; color: var(--gray);">
-                <span data-es="¿Ya tienes cuenta?" data-pt="Já tem conta?">¿Ya tienes cuenta?</span>
+                <span data-es="¿Ya tienes cuenta?">¿Ya tienes cuenta?</span>
                 <a href="#" style="color: var(--primary);" onclick="openLoginModalFromRegister()">
-                    <span data-es="Iniciar Sesión" data-pt="Entrar">Iniciar Sesión</span>
+                    <span data-es="Iniciar Sesión">Iniciar Sesión</span>
                 </a>
             </p>
             
             <button class="btn btn-secondary" style="width: 100%; margin-top: 15px;" onclick="closeRegisterModal()">
-                <span data-es="Cancelar" data-pt="Cancelar">Cancelar</span>
+                <span data-es="Cancelar">Cancelar</span>
             </button>
         </div>
     </div>
@@ -2394,11 +2513,11 @@
             <p style="text-align: center; margin-bottom: 30px; color: var(--gray);" id="logoutMessage"></p>
             
             <button class="btn btn-primary" style="width: 100%; margin-bottom: 10px;" onclick="logout()">
-                <span data-es="Cerrar Sesión" data-pt="Sair">Cerrar Sesión</span>
+                <span data-es="Cerrar Sesión">Cerrar Sesión</span>
             </button>
             
             <button class="btn btn-secondary" style="width: 100%;" onclick="closeLogoutModal()">
-                <span data-es="Cancelar" data-pt="Cancelar">Cancelar</span>
+                <span data-es="Cancelar">Cancelar</span>
             </button>
         </div>
     </div>
@@ -2410,26 +2529,26 @@
                 <!-- LOGO NO PAINEL ADMIN -->
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div class="logo-icon" style="width: 200px; height: 70px; background: transparent;">
-                        <img src="https://i.imgur.com/ooI2lHp.jpeg" alt="NutriBalance FITNESS">
+                        <img src="https://i.imgur.com/ooI2lHp.jpeg" alt="NutriBalance FITNESS" loading="lazy" decoding="async">
                     </div>
-                    <h2 class="admin-title"><span data-es="Panel de Administración" data-pt="Painel de Administração">Panel de Administración</span></h2>
+                    <h2 class="admin-title"><span data-es="Panel de Administración">Panel de Administración</span></h2>
                 </div>
                 <button class="close-admin" onclick="closeAdmin()">&times;</button>
             </div>
             
             <div class="admin-tabs">
-                <button class="tab-btn active" onclick="openTab('productsTab')">📦 <span data-es="Productos" data-pt="Produtos">Productos</span></button>
-                <button class="tab-btn" onclick="openTab('addProductTab')">➕ <span data-es="Agregar Producto" data-pt="Adicionar Produto">Agregar Producto</span></button>
-                <button class="tab-btn" onclick="openTab('heroImagesTab')">🖼️ <span data-es="Imágenes Hero" data-pt="Imagens Hero">Imágenes Hero</span></button>
-                <button class="tab-btn" onclick="openTab('qrCodeTab')">📱 <span data-es="QR Code Pago" data-pt="QR Code Pagamento">QR Code Pago</span></button>
-                <button class="tab-btn" onclick="openTab('clientsTab')">👥 <span data-es="Clientes" data-pt="Clientes">Clientes</span></button>
-                <button class="tab-btn" onclick="openTab('storeInfoTab')">🏪 <span data-es="Información Tienda" data-pt="Informação Loja">Información Tienda</span></button>
-                <button class="tab-btn" onclick="openTab('settingsTab')">⚙️ <span data-es="Configuración" data-pt="Configuração">Configuración</span></button>
+                <button class="tab-btn active" onclick="openTab('productsTab')">📦 <span data-es="Productos">Productos</span></button>
+                <button class="tab-btn" onclick="openTab('addProductTab')">➕ <span data-es="Agregar Producto">Agregar Producto</span></button>
+                <button class="tab-btn" onclick="openTab('heroImagesTab')">🖼️ <span data-es="Imágenes Hero">Imágenes Hero</span></button>
+                <button class="tab-btn" onclick="openTab('qrCodeTab')">📱 <span data-es="QR Code Pago">QR Code Pago</span></button>
+                <button class="tab-btn" onclick="openTab('clientsTab')">👥 <span data-es="Clientes">Clientes</span></button>
+                <button class="tab-btn" onclick="openTab('storeInfoTab')">🏪 <span data-es="Información Tienda">Información Tienda</span></button>
+                <button class="tab-btn" onclick="openTab('settingsTab')">⚙️ <span data-es="Configuración">Configuración</span></button>
             </div>
             
             <!-- Tab: Lista de Productos -->
             <div class="tab-content active" id="productsTab">
-                <h3 data-es="Gestión de Productos" data-pt="Gestão de Produtos">Gestión de Productos</h3>
+                <h3 data-es="Gestión de Productos">Gestión de Productos</h3>
                 <div class="product-list" id="adminProductList">
                     <!-- Productos serão listados aqui -->
                 </div>
@@ -2437,37 +2556,31 @@
             
             <!-- Tab: Agregar/Editar Producto -->
             <div class="tab-content" id="addProductTab">
-                <h3 id="formTitle" data-es="Agregar Nuevo Producto" data-pt="Adicionar Novo Produto">Agregar Nuevo Producto</h3>
+                <h3 id="formTitle" data-es="Agregar Nuevo Producto">Agregar Nuevo Producto</h3>
                 <form id="productForm" onsubmit="saveProduct(event)">
                     <input type="hidden" id="editProductId">
                     
                     <div class="form-group">
-                        <label class="form-label" data-es="Tipo" data-pt="Tipo">Tipo</label>
+                        <label class="form-label" data-es="Tipo">Tipo</label>
                         <select class="form-input" id="productType" required>
-                            <option value="product" data-es="Producto Individual" data-pt="Produto Individual">Producto Individual</option>
-                            <option value="combo" data-es="Combo Promocional" data-pt="Combo Promocional">Combo Promocional</option>
+                            <option value="product" data-es="Producto Individual">Producto Individual</option>
+                            <option value="combo" data-es="Combo Promocional">Combo Promocional</option>
                         </select>
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Nombre (ES)</label>
+                        <label class="form-label" for="nameEs">Nombre del producto</label>
                         <input type="text" class="form-input" id="nameEs" required>
                     </div>
+                    <!-- Campo namePt oculto por compatibilidad con documentos antiguos en Firestore; ya no se muestra en la UI -->
+                    <input type="hidden" id="namePt">
                     
                     <div class="form-group">
-                        <label class="form-label">Nombre (PT)</label>
-                        <input type="text" class="form-input" id="namePt" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Descripción (ES)</label>
+                        <label class="form-label" for="descriptionEs">Descripción</label>
                         <textarea class="form-textarea" id="descriptionEs" required></textarea>
                     </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Descripción (PT)</label>
-                        <textarea class="form-textarea" id="descriptionPt" required></textarea>
-                    </div>
+                    <!-- Campo descriptionPt oculto por compatibilidad con documentos antiguos en Firestore -->
+                    <input type="hidden" id="descriptionPt">
                     
                     <div class="form-group">
                         <label class="form-label" id="priceLabel">Precio (Bs)</label>
@@ -2495,47 +2608,50 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label" data-es="Imagen del Producto" data-pt="Imagem do Produto">Imagen del Producto</label>
+                        <label class="form-label" for="imageUrl">Imagen del Producto</label>
                         <div class="image-preview">
-                            <img id="imagePreview" src="" alt="Vista previa">
+                            <img id="imagePreview" src="" alt="Vista previa" loading="lazy">
                         </div>
                         <input type="text" class="form-input" id="imageUrl" 
                                placeholder="https://ejemplo.com/imagen.jpg" 
                                style="margin-bottom: 10px;">
-                        <small style="display: block; margin-bottom: 10px;">O sube una imagen desde tu computadora:</small>
-                        <input type="file" class="upload-input" id="imageUpload" accept="image/*" onchange="uploadImage(this, 'imagePreview', 'imageUrl')">
+                        <!-- thumbUrl: generado automáticamente al subir la imagen (versión ~350px para las grillas) -->
+                        <input type="hidden" id="thumbUrl">
+                        <small style="display: block; margin-bottom: 10px;">O sube una imagen desde tu computadora (se optimiza automáticamente a WebP):</small>
+                        <input type="file" class="upload-input" id="imageUpload" accept="image/*" onchange="uploadImage(this, 'imagePreview', 'imageUrl')" aria-describedby="imageUploadHelp">
+                        <span id="imageUploadHelp" class="sr-only">Sube una imagen; se generarán automáticamente una versión principal de hasta 1200px y una miniatura de 350px en formato WebP.</span>
                         <button type="button" class="upload-btn" onclick="document.getElementById('imageUpload').click()">
-                            <i class="fas fa-upload"></i> <span data-es="Subir Imagen" data-pt="Enviar Imagem">Subir Imagen</span>
+                            <i class="fas fa-upload"></i> <span data-es="Subir Imagen">Subir Imagen</span>
                         </button>
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label" data-es="Categoría" data-pt="Categoria">Categoría</label>
+                        <label class="form-label" data-es="Categoría">Categoría</label>
                         <select class="form-input" id="category">
-                            <option value="carne" data-es="Carne" data-pt="Carne">Carne</option>
-                            <option value="pollo" data-es="Pollo" data-pt="Frango">Pollo</option>
-                            <option value="pescado" data-es="Pescado" data-pt="Peixe">Pescado</option>
-                            <option value="vegano" data-es="Vegano" data-pt="Vegano">Vegano</option>
+                            <option value="carne" data-es="Carne">Carne</option>
+                            <option value="pollo" data-es="Pollo">Pollo</option>
+                            <option value="pescado" data-es="Pescado">Pescado</option>
+                            <option value="vegano" data-es="Vegano">Vegano</option>
                         </select>
                     </div>
                     
                     <button type="submit" class="btn btn-primary" id="saveProductBtn">
-                        💾 <span data-es="Guardar Producto" data-pt="Salvar Produto">Guardar Producto</span>
+                        💾 <span data-es="Guardar Producto">Guardar Producto</span>
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="clearForm()">🔄 <span data-es="Limpiar" data-pt="Limpar">Limpiar</span></button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">🔄 <span data-es="Limpiar">Limpiar</span></button>
                 </form>
             </div>
             
             <!-- Tab: Imagens Hero -->
             <div class="tab-content" id="heroImagesTab">
-                <h3 data-es="Imágenes de la Sección Hero" data-pt="Imagens da Seção Hero">Imágenes de la Sección Hero</h3>
+                <h3 data-es="Imágenes de la Sección Hero">Imágenes de la Sección Hero</h3>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Imagen de Marmita 1" data-pt="Imagem de Marmita 1">Imagen de Marmita 1</label>
+                    <label class="form-label" data-es="Imagen de Marmita 1">Imagen de Marmita 1</label>
                     <div class="image-preview" id="carnePreviewContainer">
                         <div id="carnePlaceholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--gray);">
                             <i class="fas fa-hamburger" style="font-size: 40px; margin-bottom: 10px;"></i>
-                            <span data-es="Sin imagen - Haz clic para cargar" data-pt="Sem imagem - Clique para carregar">Sin imagen - Haz clic para cargar</span>
+                            <span data-es="Sin imagen - Haz clic para cargar">Sin imagen - Haz clic para cargar</span>
                         </div>
                         <img id="heroCarnePreview" src="" alt="Marmita 1" style="display: none;">
                     </div>
@@ -2544,10 +2660,10 @@
                            style="margin-bottom: 10px;">
                     <input type="file" class="upload-input" id="heroCarneUpload" accept="image/*" onchange="uploadHeroImage(this, 'heroCarnePreview', 'heroCarneUrl', 'carnePreviewContainer')">
                     <button type="button" class="upload-btn" onclick="document.getElementById('heroCarneUpload').click()">
-                        <i class="fas fa-upload"></i> <span data-es="Subir Imagen" data-pt="Enviar Imagem">Subir Imagen</span>
+                        <i class="fas fa-upload"></i> <span data-es="Subir Imagen">Subir Imagen</span>
                     </button>
                     <div style="margin-top:12px;">
-                        <label class="form-label" style="font-size:13px;" data-es="Texto de la leyenda (visible en la foto)" data-pt="Texto da legenda (visível na foto)">Texto da legenda (visível na foto)</label>
+                        <label class="form-label" style="font-size:13px;" data-es="Texto de la leyenda (visible en la foto)">Texto da legenda (visível na foto)</label>
                         <input type="text" class="form-input" id="heroCarneLabel" placeholder="Ex: Carne Fitness"
                                oninput="document.getElementById('carneLabel').textContent = this.value"
                                style="margin-top:4px;">
@@ -2555,11 +2671,11 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Imagen de Marmita 2" data-pt="Imagem de Marmita 2">Imagen de Marmita 2</label>
+                    <label class="form-label" data-es="Imagen de Marmita 2">Imagen de Marmita 2</label>
                     <div class="image-preview" id="frangoPreviewContainer">
                         <div id="frangoPlaceholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--gray);">
                             <i class="fas fa-drumstick-bite" style="font-size: 40px; margin-bottom: 10px;"></i>
-                            <span data-es="Sin imagen - Haz clic para cargar" data-pt="Sem imagem - Clique para carregar">Sin imagen - Haz clic para cargar</span>
+                            <span data-es="Sin imagen - Haz clic para cargar">Sin imagen - Haz clic para cargar</span>
                         </div>
                         <img id="heroFrangoPreview" src="" alt="Marmita 2" style="display: none;">
                     </div>
@@ -2568,10 +2684,10 @@
                            style="margin-bottom: 10px;">
                     <input type="file" class="upload-input" id="heroFrangoUpload" accept="image/*" onchange="uploadHeroImage(this, 'heroFrangoPreview', 'heroFrangoUrl', 'frangoPreviewContainer')">
                     <button type="button" class="upload-btn" onclick="document.getElementById('heroFrangoUpload').click()">
-                        <i class="fas fa-upload"></i> <span data-es="Subir Imagen" data-pt="Enviar Imagem">Subir Imagen</span>
+                        <i class="fas fa-upload"></i> <span data-es="Subir Imagen">Subir Imagen</span>
                     </button>
                     <div style="margin-top:12px;">
-                        <label class="form-label" style="font-size:13px;" data-es="Texto de la leyenda (visible en la foto)" data-pt="Texto da legenda (visível na foto)">Texto da legenda (visível na foto)</label>
+                        <label class="form-label" style="font-size:13px;" data-es="Texto de la leyenda (visible en la foto)">Texto da legenda (visível na foto)</label>
                         <input type="text" class="form-input" id="heroFrangoLabel" placeholder="Ex: Frango Fitness"
                                oninput="document.getElementById('frangoLabel').textContent = this.value"
                                style="margin-top:4px;">
@@ -2579,14 +2695,14 @@
                 </div>
                 
                 <button class="btn btn-primary" onclick="saveHeroImages()" id="saveHeroImagesBtn">
-                    💾 <span data-es="Guardar Imágenes" data-pt="Salvar Imagens">Guardar Imágenes</span>
+                    💾 <span data-es="Guardar Imágenes">Guardar Imágenes</span>
                 </button>
             </div>
             
             <!-- Tab: Clientes -->
             <div class="tab-content" id="clientsTab">
-                <h3 data-es="Gestión de Clientes" data-pt="Gestão de Clientes">Gestión de Clientes</h3>
-                <p data-es="Ver y gestionar todos los clientes registrados" data-pt="Ver e gerenciar todos os clientes registrados">
+                <h3 data-es="Gestión de Clientes">Gestión de Clientes</h3>
+                <p data-es="Ver y gestionar todos los clientes registrados">
                     Ver y gestionar todos los clientes registrados
                 </p>
                 
@@ -2595,10 +2711,10 @@
                     <input type="number" id="adminMinOrders" class="filter-input" placeholder="Mín. pedidos" style="flex: 1;">
                     <input type="number" id="adminMinSpent" class="filter-input" placeholder="Mín. gastado" style="flex: 1;">
                     <button class="btn btn-primary" onclick="loadAdminClients()">
-                        🔍 <span data-es="Buscar" data-pt="Buscar">Buscar</span>
+                        🔍 <span data-es="Buscar">Buscar</span>
                     </button>
                     <button class="btn btn-secondary" onclick="showClientsPage()">
-                        📋 <span data-es="Ver Reporte Completo" data-pt="Ver Relatório Completo">Ver Reporte Completo</span>
+                        📋 <span data-es="Ver Reporte Completo">Ver Reporte Completo</span>
                     </button>
                 </div>
                 
@@ -2607,20 +2723,20 @@
                 </div>
                 
                 <div style="margin-top: 20px; padding: 15px; background: var(--light); border-radius: var(--radius);">
-                    <h4><i class="fas fa-birthday-cake"></i> <span data-es="Próximos Cumpleaños" data-pt="Próximos Aniversários">Próximos Cumpleaños</span></h4>
+                    <h4><i class="fas fa-birthday-cake"></i> <span data-es="Próximos Cumpleaños">Próximos Cumpleaños</span></h4>
                     <div id="upcomingBirthdays"></div>
                 </div>
             </div>
             
             <!-- Tab: QR Code Pago -->
             <div class="tab-content" id="qrCodeTab">
-                <h3 data-es="Configuración de Pago QR" data-pt="Configuração de Pagamento QR">Configuración de Pago QR</h3>
-                <p data-es="Sube la imagen del código QR para pagos" data-pt="Envie a imagem do código QR para pagamentos">
+                <h3 data-es="Configuración de Pago QR">Configuración de Pago QR</h3>
+                <p data-es="Sube la imagen del código QR para pagos">
                     Sube la imagen del código QR para pagos
                 </p>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="QR Code para Pagos" data-pt="QR Code para Pagamentos">QR Code para Pagos</label>
+                    <label class="form-label" data-es="QR Code para Pagos">QR Code para Pagos</label>
                     <div class="image-preview">
                         <img id="qrcodePreview" src="" alt="QR Code">
                     </div>
@@ -2629,47 +2745,46 @@
                            style="margin-bottom: 10px;">
                     <input type="file" class="upload-input" id="qrcodeUpload" accept="image/*" onchange="uploadImage(this, 'qrcodePreview', 'qrcodeUrl', 'qrcode')">
                     <button type="button" class="upload-btn" onclick="document.getElementById('qrcodeUpload').click()">
-                        <i class="fas fa-upload"></i> <span data-es="Subir QR Code" data-pt="Enviar QR Code">Subir QR Code</span>
+                        <i class="fas fa-upload"></i> <span data-es="Subir QR Code">Subir QR Code</span>
                     </button>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Código PIX (Opcional)" data-pt="Código PIX (Opcional)">Código PIX (Opcional)</label>
+                    <label class="form-label" data-es="Código PIX (Opcional)">Código PIX (Opcional)</label>
                     <input type="text" class="form-input" id="pixCodeInput" placeholder="00020126580014BR.GOV.BCB.PIX...">
                 </div>
                 
                 <button class="btn btn-primary" onclick="saveQRCode()" id="saveQRCodeBtn">
-                    💾 <span data-es="Guardar QR Code" data-pt="Salvar QR Code">Guardar QR Code</span>
+                    💾 <span data-es="Guardar QR Code">Guardar QR Code</span>
                 </button>
             </div>
             
             <!-- Tab: Información de la Tienda -->
             <div class="tab-content" id="storeInfoTab">
-                <h3 data-es="Información de la Tienda" data-pt="Informação da Loja">Información de la Tienda</h3>
+                <h3 data-es="Información de la Tienda">Información de la Tienda</h3>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Descripción del Footer" data-pt="Descrição do Rodapé">Descripción del Footer</label>
+                    <label class="form-label" data-es="Descripción del Footer">Descripción del Footer</label>
                     <textarea class="form-textarea" id="footerDescriptionInput" placeholder="Tu equilibrio nutricional entregado en casa">Tu equilibrio nutricional entregado en casa</textarea>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Redes Sociales" data-pt="Redes Sociais">Redes Sociales</label>
+                    <label class="form-label" data-es="Redes Sociales">Redes Sociales</label>
                     <input type="text" class="form-input" id="instagramInput" placeholder="URL Instagram">
                     <input type="text" class="form-input" id="facebookInput" placeholder="URL Facebook" style="margin-top: 10px;">
                     <input type="text" class="form-input" id="tiktokInput" placeholder="URL TikTok" style="margin-top: 10px;">
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Dirección" data-pt="Endereço">Dirección</label>
+                    <label class="form-label" data-es="Dirección">Dirección</label>
                     <input type="text" class="form-input" id="addressInput" placeholder="Santa Cruz de la Sierra, Bolivia" value="Santa Cruz de la Sierra, Bolivia">
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" id="deliveryTextLabel" data-es="Texto de Entrega (para WhatsApp)" data-pt="Texto de Entrega (para WhatsApp)">Texto de Entrega (para WhatsApp)</label>
+                    <label class="form-label" id="deliveryTextLabel" data-es="Texto de Entrega (para WhatsApp)">Texto de Entrega (para WhatsApp)</label>
                     <input type="text" class="form-input" id="deliveryTextInput" placeholder="A combinar" value="Calcular via WhatsApp">
                     <small style="color: var(--gray); display: block; margin-top: 5px;">
-                        <span data-es="Este texto aparecerá en el mensaje de WhatsApp para la entrega" 
-                              data-pt="Este texto aparecerá na mensagem do WhatsApp para a entrega">
+                        <span data-es="Este texto aparecerá en el mensaje de WhatsApp para la entrega">
                             Este texto aparecerá en el mensaje de WhatsApp para la entrega
                         </span>
                     </small>
@@ -2679,8 +2794,7 @@
                     <label class="form-label" id="deliveryPriceLabel">Precio de Entrega (Bs)</label>
                     <input type="number" step="0.01" class="form-input" id="deliveryPriceInput" value="">
                     <small style="color: var(--gray); display: block; margin-top: 5px;">
-                        <span data-es="Dejar vacío para mostrar 'Calcular via WhatsApp'" 
-                              data-pt="Deixar vazio para mostrar 'Calcular via WhatsApp'">
+                        <span data-es="Dejar vacío para mostrar 'Calcular via WhatsApp'">
                             Dejar vacío para mostrar 'Calcular via WhatsApp'
                         </span>
                     </small>
@@ -2688,48 +2802,47 @@
 
                 <!-- NOVO CAMPO: Frase abaixo das imagens hero -->
                 <div class="form-group">
-                    <label class="form-label" data-es="Frase Hero (debajo de las imágenes)" data-pt="Frase Hero (abaixo das imagens)">Frase Hero (debajo de las imágenes)</label>
+                    <label class="form-label" data-es="Frase Hero (debajo de las imágenes)">Frase Hero (debajo de las imágenes)</label>
                     <input type="text" class="form-input" id="heroPhraseInput" placeholder="Ej: Comida saludable entregada en 24h" value="Comida saludable entregada en 24h">
                     <small style="color: var(--gray); display: block; margin-top: 5px;">
-                        <span data-es="Esta frase aparecerá debajo de las dos fotos de marmitas en la página principal." 
-                              data-pt="Esta frase aparecerá abaixo das duas fotos de marmitas na página inicial.">
+                        <span data-es="Esta frase aparecerá debajo de las dos fotos de marmitas en la página principal.">
                             Esta frase aparecerá debajo de las dos fotos de marmitas en la página principal.
                         </span>
                     </small>
                 </div>
                 
                 <button class="btn btn-primary" onclick="saveStoreInfo()" id="saveStoreInfoBtn">
-                    💾 <span data-es="Guardar Información" data-pt="Salvar Informação">Guardar Información</span>
+                    💾 <span data-es="Guardar Información">Guardar Información</span>
                 </button>
             </div>
             
             <!-- Tab: Configuración -->
             <div class="tab-content" id="settingsTab">
-                <h3 data-es="Configuración General" data-pt="Configuração Geral">Configuración General</h3>
+                <h3 data-es="Configuración General">Configuración General</h3>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Nombre del Negocio" data-pt="Nome do Negócio">Nombre del Negocio</label>
+                    <label class="form-label" data-es="Nombre del Negocio">Nombre del Negocio</label>
                     <input type="text" class="form-input" id="businessName" value="NutriBalance">
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="WhatsApp (Bolivia)" data-pt="WhatsApp (Bolívia)">WhatsApp (Bolivia)</label>
+                    <label class="form-label" data-es="WhatsApp (Bolivia)">WhatsApp (Bolivia)</label>
                     <input type="text" class="form-input" id="whatsappNumber" value="59177123456">
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" data-es="Email de Contacto" data-pt="Email de Contato">Email de Contacto</label>
+                    <label class="form-label" data-es="Email de Contacto">Email de Contacto</label>
                     <input type="email" class="form-input" id="contactEmail" value="hola@nutribalance.com">
                 </div>
                 
                 <button class="btn btn-primary" onclick="saveSettings()" id="saveSettingsBtn">
-                    💾 <span data-es="Guardar Configuración" data-pt="Salvar Configuração">Guardar Configuración</span>
+                    💾 <span data-es="Guardar Configuración">Guardar Configuración</span>
                 </button>
                 
                 <div style="margin-top: 30px; padding: 20px; background: var(--light); border-radius: var(--radius);">
-                    <h4>📊 <span data-es="Exportar/Importar Datos" data-pt="Exportar/Importar Dados">Exportar/Importar Datos</span></h4>
-                    <button class="btn btn-secondary" onclick="exportData()">📥 <span data-es="Exportar Base de Datos" data-pt="Exportar Base de Dados">Exportar Base de Datos</span></button>
-                    <button class="btn btn-secondary" onclick="importData()">📤 <span data-es="Importar Base de Datos" data-pt="Importar Base de Dados">Importar Base de Datos</span></button>
+                    <h4>📊 <span data-es="Exportar/Importar Datos">Exportar/Importar Datos</span></h4>
+                    <button class="btn btn-secondary" onclick="exportData()">📥 <span data-es="Exportar Base de Datos">Exportar Base de Datos</span></button>
+                    <button class="btn btn-secondary" onclick="importData()">📤 <span data-es="Importar Base de Datos">Importar Base de Datos</span></button>
                     <input type="file" id="importFile" style="display: none;" accept=".json">
                 </div>
             </div>
@@ -2751,27 +2864,40 @@
         let firebaseApp = null;
         let firebaseStorage = null;
         let firestoreDB = null;
+        let firebaseReadyPromise = null;
 
-        try {
-            firebaseApp = firebase.initializeApp(firebaseConfig);
-            firebaseStorage = firebase.storage();
-            firestoreDB = firebase.firestore();
-            console.log('🔥 Firebase Storage + Firestore conectados com sucesso!');
-        } catch (e) {
-            console.warn('⚠️ Firebase não disponível:', e.message);
+        // Los SDKs de Firebase se cargan con `defer`, así que se ejecutan DESPUÉS
+        // de que este script inline es parseado. Por eso la inicialización se
+        // hace en una función, disparada por DOMContentLoaded (evento que se
+        // dispara después de que los scripts con `defer` ya corrieron).
+        function initFirebaseApp() {
+            try {
+                firebaseApp = firebase.initializeApp(firebaseConfig);
+                firebaseStorage = firebase.storage();
+                firestoreDB = firebase.firestore();
+                console.log('🔥 Firebase Storage + Firestore conectados com sucesso!');
+            } catch (e) {
+                console.warn('⚠️ Firebase não disponível:', e.message);
+            }
         }
 
-        // Faz upload de um File para o Firebase Storage e retorna a URL pública
+        firebaseReadyPromise = new Promise((resolve) => {
+            document.addEventListener('DOMContentLoaded', () => {
+                initFirebaseApp();
+                resolve();
+            });
+        });
+
+        // Faz upload de um File para o Firebase Storage e retorna a URL pública (versão única, uso genérico)
         async function uploadToFirebase(file, folder = 'images') {
             if (!firebaseStorage) {
                 throw new Error('Firebase Storage não disponível. Verifique a conexão e tente novamente.');
             }
 
             // Comprime a imagem antes de enviar (reduz tamanho drasticamente)
-            const compressedFile = await compressImage(file, 800, 0.82);
+            const compressedFile = await compressImage(file, 1200, 0.8, 'image/webp');
 
-            const ext = file.name.split('.').pop();
-            const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substr(2, 8)}.${ext}`;
+            const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substr(2, 8)}.webp`;
             const storageRef = firebaseStorage.ref(fileName);
 
             const snapshot = await storageRef.put(compressedFile);
@@ -2779,9 +2905,41 @@
             return downloadURL;
         }
 
-        // Comprime imagem antes do upload (evita estouro de localStorage e Firestore)
-        function compressImage(file, maxWidth = 800, quality = 0.82) {
-            return new Promise((resolve) => {
+        // Upload "responsivo": genera y sube DOS tamaños (principal + thumb) para permitir srcset.
+        // NOTA (ver guía de despliegue): esto sube 2 anchos reales, no 3. Para un tercer ancho
+        // intermedio sin duplicar lógica de compresión en el cliente, lo recomendable es usar
+        // la extensión oficial "Resize Images" de Firebase (Cloud Function) sobre este mismo bucket.
+        async function uploadToFirebaseResponsive(file, folder = 'products') {
+            if (!firebaseStorage) {
+                throw new Error('Firebase Storage não disponível. Verifique a conexão e tente novamente.');
+            }
+            const baseName = `${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
+
+            const [mainBlob, thumbBlob] = await Promise.all([
+                compressImage(file, 1200, 0.8, 'image/webp'),
+                compressImage(file, 350, 0.8, 'image/webp')
+            ]);
+
+            const mainRef = firebaseStorage.ref(`${folder}/${baseName}.webp`);
+            const thumbRef = firebaseStorage.ref(`${folder}/${baseName}_thumb.webp`);
+
+            const [mainSnap, thumbSnap] = await Promise.all([
+                mainRef.put(mainBlob),
+                thumbRef.put(thumbBlob)
+            ]);
+
+            const [url, thumbUrl] = await Promise.all([
+                mainSnap.ref.getDownloadURL(),
+                thumbSnap.ref.getDownloadURL()
+            ]);
+
+            return { url, thumbUrl };
+        }
+
+        // Comprime/redimensiona una imagen en el cliente antes del upload (Canvas -> WebP).
+        // Si el navegador no soporta codificar WebP, toBlob cae de vuelta a PNG/JPEG automáticamente.
+        function compressImage(file, maxWidth = 1200, quality = 0.8, mimeType = 'image/webp') {
+            return new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const img = new Image();
@@ -2795,10 +2953,12 @@
                         canvas.width = width;
                         canvas.height = height;
                         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', quality);
+                        canvas.toBlob((blob) => resolve(blob || file), mimeType, quality);
                     };
+                    img.onerror = reject;
                     img.src = e.target.result;
                 };
+                reader.onerror = reject;
                 reader.readAsDataURL(file);
             });
         }
@@ -3348,50 +3508,14 @@
             }
         }
 
-        // ===== IDIOMA E MOEDA =====
-        function changeLanguage(lang) {
-            currentLanguage = lang;
-            
-            document.querySelectorAll('.flag').forEach(flag => {
-                flag.classList.remove('active');
-            });
-            const flagClass = lang === 'es' ? 'bo' : 'br';
-            document.querySelector(`.flag-${flagClass}`).classList.add('active');
-            
-            updateCurrencySymbol(lang);
-            
-            updateAllLanguageElements();
-            
-            renderProducts();
-            renderCombos();
-            
-            loadHeroPhraseFromSettings();
-            
-            const deliveryLocation = document.getElementById('deliveryLocation');
-            if (deliveryLocation) {
-                deliveryLocation.placeholder = currentLanguage === 'es' 
-                    ? 'Ingresa tu dirección completa (calle, número, barrio, ciudad)...' 
-                    : 'Insira seu endereço completo (rua, número, bairro, cidade)...';
-            }
-            
-            showDynamicPhrase();
-        }
-
-        async function updateCurrencySymbol(lang) {
-            try {
-                const settings = await dbGet(STORES.SETTINGS, 'app_settings');
-                if (settings) {
-                    settings.currencySymbol = lang === 'es' ? 'Bs' : 'R$';
-                    await dbPut(STORES.SETTINGS, settings);
-                }
-            } catch (error) {
-                console.error('❌ Erro ao atualizar símbolo de moeda:', error);
-            }
-        }
+        // ===== IDIOMA (fijo en Español) =====
+        // El selector de idioma fue removido: el sitio es exclusivamente en Español.
+        // currentLanguage se mantiene como constante para no romper el resto del código
+        // (varias funciones abajo todavía leen currentLanguage/data-es por compatibilidad).
 
         function updateAllLanguageElements() {
-            document.querySelectorAll('[data-es], [data-pt]').forEach(element => {
-                const text = element.getAttribute(`data-${currentLanguage}`);
+            document.querySelectorAll('[data-es]').forEach(element => {
+                const text = element.getAttribute('data-es');
                 if (text) {
                     if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {
                         if (element.placeholder) {
@@ -3443,13 +3567,17 @@
                 const currencySymbol = settings ? settings.currencySymbol : 'Bs';
                 
                 container.innerHTML = products.map(product => `
-                    <div class="product-card">
+                    <div class="product-card" role="listitem">
                         <div class="product-image">
-                            <img src="${product.imageUrl}" alt="${currentLanguage === 'es' ? product.nameEs : product.namePt}" class="product-img">
+                            <img src="${product.thumbUrl || product.imageUrl}"
+                                 srcset="${(product.thumbUrl || product.imageUrl)} 350w, ${product.imageUrl} 1200w"
+                                 sizes="(max-width: 600px) 90vw, 320px"
+                                 alt="${product.nameEs}" class="product-img"
+                                 loading="lazy" decoding="async">
                         </div>
                         <div class="product-info">
-                            <h3 class="product-title">${currentLanguage === 'es' ? product.nameEs : product.namePt}</h3>
-                            <p class="product-description">${currentLanguage === 'es' ? product.descriptionEs : product.descriptionPt}</p>
+                            <h3 class="product-title">${product.nameEs}</h3>
+                            <p class="product-description">${product.descriptionEs}</p>
                             
                             ${product.calories ? `
                                 <div class="product-macros">
@@ -3459,19 +3587,19 @@
                                     </div>
                                     <div class="macro">
                                         <span class="macro-value">${product.protein}g</span>
-                                        <span class="macro-label">${currentLanguage === 'es' ? 'Proteína' : 'Proteína'}</span>
+                                        <span class="macro-label">Proteína</span>
                                     </div>
                                     <div class="macro">
                                         <span class="macro-value">${product.carbs}g</span>
-                                        <span class="macro-label">${currentLanguage === 'es' ? 'Carbs' : 'Carboidratos'}</span>
+                                        <span class="macro-label">Carbs</span>
                                     </div>
                                 </div>
                             ` : ''}
                             
                             <div class="product-footer">
                                 <div class="product-price">${currencySymbol} ${product.price.toFixed(2)}</div>
-                                <button class="add-to-cart" onclick="addToCart(${product.id}, '${(currentLanguage === 'es' ? product.nameEs : product.namePt).replace(/'/g, "\\'")}', ${product.price}, 'product', '${product.imageUrl.replace(/'/g, "\\'")}')">
-                                    <i class="fas fa-plus"></i>
+                                <button class="add-to-cart" aria-label="Agregar ${product.nameEs.replace(/"/g, '&quot;')} al carrito" onclick="addToCart(${product.id}, '${product.nameEs.replace(/'/g, "\\'")}', ${product.price}, 'product', '${product.imageUrl.replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-plus" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -3479,9 +3607,37 @@
                 `).join('');
                 
                 updateAllLanguageElements();
+                injectProductJsonLd(products);
             } catch (error) {
                 console.error('❌ Erro ao renderizar produtos:', error);
             }
+        }
+
+        // Genera/actualiza el JSON-LD de tipo Product para SEO, uno por producto visible.
+        function injectProductJsonLd(products) {
+            const existing = document.getElementById('productJsonLd');
+            if (existing) existing.remove();
+            if (!products || !products.length) return;
+
+            const graph = products.slice(0, 30).map(p => ({
+                "@type": "Product",
+                "name": p.nameEs,
+                "sku": String(p.id),
+                "image": p.imageUrl,
+                "description": p.descriptionEs,
+                "offers": {
+                    "@type": "Offer",
+                    "price": p.price,
+                    "priceCurrency": "BOB",
+                    "availability": "https://schema.org/InStock"
+                }
+            }));
+
+            const script = document.createElement('script');
+            script.type = 'application/ld+json';
+            script.id = 'productJsonLd';
+            script.textContent = JSON.stringify({ "@context": "https://schema.org", "@graph": graph });
+            document.head.appendChild(script);
         }
 
         async function renderCombos() {
@@ -3495,18 +3651,22 @@
                 const currencySymbol = settings ? settings.currencySymbol : 'Bs';
                 
                 container.innerHTML = combos.map(combo => `
-                    <div class="product-card" style="border: 3px solid var(--secondary);">
+                    <div class="product-card" role="listitem" style="border: 3px solid var(--secondary);">
                         <div class="product-image">
-                            <img src="${combo.imageUrl}" alt="${currentLanguage === 'es' ? combo.nameEs : combo.namePt}" class="product-img">
+                            <img src="${combo.thumbUrl || combo.imageUrl}"
+                                 srcset="${(combo.thumbUrl || combo.imageUrl)} 350w, ${combo.imageUrl} 1200w"
+                                 sizes="(max-width: 600px) 90vw, 320px"
+                                 alt="${combo.nameEs}" class="product-img"
+                                 loading="lazy" decoding="async">
                         </div>
                         <div class="product-info">
-                            <h3 class="product-title">${currentLanguage === 'es' ? combo.nameEs : combo.namePt}</h3>
-                            <p class="product-description">${currentLanguage === 'es' ? combo.descriptionEs : combo.descriptionPt}</p>
+                            <h3 class="product-title">${combo.nameEs}</h3>
+                            <p class="product-description">${combo.descriptionEs}</p>
                             
                             <div class="product-footer">
                                 <div class="product-price">${currencySymbol} ${combo.price.toFixed(2)}</div>
-                                <button class="add-to-cart" onclick="addToCart(${combo.id}, '${(currentLanguage === 'es' ? combo.nameEs : combo.namePt).replace(/'/g, "\\'")}', ${combo.price}, 'combo', '${combo.imageUrl.replace(/'/g, "\\'")}')">
-                                    <i class="fas fa-plus"></i>
+                                <button class="add-to-cart" aria-label="Agregar ${combo.nameEs.replace(/"/g, '&quot;')} al carrito" onclick="addToCart(${combo.id}, '${combo.nameEs.replace(/'/g, "\\'")}', ${combo.price}, 'combo', '${combo.imageUrl.replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-plus" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -3866,7 +4026,7 @@
                 if (currentUser.type === 'admin') {
                     userButtons.innerHTML = `
                         <button class="login-btn" onclick="openAdmin()">
-                            ⚙️ <span data-es="Admin" data-pt="Admin">Admin</span>
+                            ⚙️ <span data-es="Admin">Admin</span>
                         </button>
                         <button class="logout-btn" onclick="openLogoutModal()">
                             👋 ${currentUser.name}
@@ -3883,7 +4043,7 @@
                 console.log('👤 Nenhum usuário logado, mostrando botão de login');
                 userButtons.innerHTML = `
                     <button class="login-btn" onclick="openLoginModal()">
-                        👤 <span data-es="Iniciar Sesión" data-pt="Entrar">Iniciar Sesión</span>
+                        👤 <span data-es="Iniciar Sesión">Iniciar Sesión</span>
                     </button>
                 `;
             }
@@ -4021,7 +4181,7 @@
                 
                 let imageHtml = '';
                 if (item.imageUrl) {
-                    imageHtml = `<img src="${item.imageUrl}" alt="${item.name}" class="cart-item-img">`;
+                    imageHtml = `<img src="${item.imageUrl}" alt="${item.name}" class="cart-item-img" loading="lazy" decoding="async">`;
                 } else {
                     imageHtml = `<div style="width: 100%; height: 100%; background: var(--light); display: flex; align-items: center; justify-content: center; font-size: 40px;">
                                     ${item.type === 'combo' ? '🎁' : '🍽️'}
@@ -4150,7 +4310,7 @@
             if (!sendOrderBtn) return;
             
             const originalText = sendOrderBtn.innerHTML;
-            sendOrderBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Enviando..." data-pt="Enviando...">Enviando...</span>';
+            sendOrderBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Enviando...">Enviando...</span>';
             sendOrderBtn.disabled = true;
             updateAllLanguageElements();
             
@@ -4293,12 +4453,16 @@
             }
             
             document.getElementById('adminPanel').style.display = 'block';
+            const banner = document.getElementById('adminDemoBanner');
+            if (banner) banner.style.display = 'block';
             await loadAdminData();
             updateAllLanguageElements();
         }
 
         function closeAdmin() {
             document.getElementById('adminPanel').style.display = 'none';
+            const banner = document.getElementById('adminDemoBanner');
+            if (banner) banner.style.display = 'none';
             clearForm();
         }
 
@@ -4369,7 +4533,7 @@
                 container.innerHTML = allItems.map(item => `
                     <div class="product-item">
                         <div>
-                            <strong>${item.type === 'combo' ? '🎁 ' : '🍽️ '}${currentLanguage === 'es' ? item.nameEs : item.namePt}</strong><br>
+                            <strong>${item.type === 'combo' ? '🎁 ' : '🍽️ '}${item.nameEs}</strong><br>
                             <small>${item.type === 'combo' ? 'COMBO' : 'PRODUTO'} - ${item.price ? 'Bs ' + item.price.toFixed(2) : ''}</small>
                         </div>
                         <div class="product-item-actions">
@@ -4568,18 +4732,18 @@
             };
             localReader.readAsDataURL(file);
 
-            showNotification(currentLanguage === 'es' ? '⏳ Subiendo imagen...' : '⏳ Enviando imagem...');
+            showNotification('⏳ Subiendo imagen (generando versión principal y miniatura)...');
 
             try {
-                const url = await uploadToFirebase(file, folder);
+                const { url, thumbUrl } = await uploadToFirebaseResponsive(file, folder);
                 if (urlInput) urlInput.value = url;
+                const thumbInput = document.getElementById('thumbUrl');
+                if (thumbInput) thumbInput.value = thumbUrl;
                 if (preview) { preview.src = url; preview.style.display = 'block'; }
-                showNotification(currentLanguage === 'es' ? '✅ Imagen subida con éxito' : '✅ Imagem enviada com sucesso');
+                showNotification('✅ Imagen subida con éxito (WebP, 1200px + miniatura 350px)');
             } catch (err) {
                 console.error('Erro no upload:', err);
-                showNotification(currentLanguage === 'es'
-                    ? '❌ Error al subir imagen. Verifica la conexión a internet.'
-                    : '❌ Erro ao enviar imagem. Verifique a conexão com a internet.');
+                showNotification('❌ Error al subir imagen. Verifica la conexión a internet.');
             }
         }
 
@@ -4674,6 +4838,7 @@
                 document.getElementById('carbs').value = product.carbs || '';
                 document.getElementById('fat').value = product.fat || '';
                 document.getElementById('imageUrl').value = product.imageUrl || '';
+                document.getElementById('thumbUrl').value = product.thumbUrl || '';
                 document.getElementById('category').value = product.category || 'carne';
                 
                 updateImagePreview(product.imageUrl);
@@ -4718,7 +4883,7 @@
             if (!saveBtn) return;
             
             const originalText = saveBtn.innerHTML;
-            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando..." data-pt="Salvando...">Guardando...</span>';
+            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando...">Guardando...</span>';
             saveBtn.disabled = true;
             updateAllLanguageElements();
             
@@ -4740,6 +4905,7 @@
                     carbs: document.getElementById('carbs').value ? parseFloat(document.getElementById('carbs').value) : null,
                     fat: document.getElementById('fat').value ? parseFloat(document.getElementById('fat').value) : null,
                     imageUrl: document.getElementById('imageUrl').value,
+                    thumbUrl: document.getElementById('thumbUrl').value || document.getElementById('imageUrl').value,
                     category: document.getElementById('category').value
                 };
                 
@@ -4809,7 +4975,7 @@
             if (!saveBtn) return;
             
             const originalText = saveBtn.innerHTML;
-            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando..." data-pt="Salvando...">Guardando...</span>';
+            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando...">Guardando...</span>';
             saveBtn.disabled = true;
             updateAllLanguageElements();
             
@@ -5180,7 +5346,7 @@
             if (!saveBtn) return;
             
             const originalText = saveBtn.innerHTML;
-            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando..." data-pt="Salvando...">Guardando...</span>';
+            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando...">Guardando...</span>';
             saveBtn.disabled = true;
             updateAllLanguageElements();
             
@@ -5234,7 +5400,7 @@
             if (!saveBtn) return;
             
             const originalText = saveBtn.innerHTML;
-            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando..." data-pt="Salvando...">Guardando...</span>';
+            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando...">Guardando...</span>';
             saveBtn.disabled = true;
             updateAllLanguageElements();
             
@@ -5400,7 +5566,7 @@
             if (!saveBtn) return;
             
             const originalText = saveBtn.innerHTML;
-            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando..." data-pt="Salvando...">Guardando...</span>';
+            saveBtn.innerHTML = '<div class="loading-spinner"></div> <span data-es="Guardando...">Guardando...</span>';
             saveBtn.disabled = true;
             updateAllLanguageElements();
             
@@ -5573,6 +5739,8 @@
             
             const notification = document.createElement('div');
             notification.className = 'custom-notification';
+            notification.setAttribute('role', 'status');
+            notification.setAttribute('aria-live', 'polite');
             notification.textContent = message;
             document.body.appendChild(notification);
             
