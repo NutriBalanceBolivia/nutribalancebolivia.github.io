@@ -3094,8 +3094,9 @@
         }
 
         // Sincroniza dados locais para o Firestore quando ficar online
+        // (CART fica de fora de propósito: carrinho é por navegador/sessão, nunca deve virar dado compartilhado no Firestore)
         async function syncLocalToFirestore() {
-            const stores = Object.values(STORES);
+            const stores = Object.values(STORES).filter(s => s !== STORES.CART);
             for (const store of stores) {
                 const localItems = lsGetAll(store);
                 for (const item of localItems) {
@@ -3117,6 +3118,11 @@
             // Sempre retorna localStorage imediatamente
             const localData = lsGetAll(storeName);
 
+            // CART nunca vai ao Firestore: é dado local por navegador/sessão, não compartilhado
+            if (storeName === STORES.CART) {
+                return localData;
+            }
+
             // Se Firestore online, busca lá e atualiza local
             if (firestoreOnline && firestoreDB) {
                 try {
@@ -3137,6 +3143,11 @@
         async function dbGet(storeName, id) {
             const localItems = lsGetAll(storeName);
             const localItem = localItems.find(i => String(i.id) === String(id)) || null;
+
+            // CART nunca vai ao Firestore: é dado local por navegador/sessão, não compartilhado
+            if (storeName === STORES.CART) {
+                return localItem;
+            }
 
             if (firestoreOnline && firestoreDB) {
                 try {
@@ -3174,6 +3185,11 @@
             const idx = items.findIndex(i => String(i.id) === docId);
             if (idx >= 0) items[idx] = dataToSave; else items.push(dataToSave);
             lsSave(storeName, items);
+
+            // CART nunca vai ao Firestore: é dado local por navegador/sessão, não compartilhado
+            if (storeName === STORES.CART) {
+                return dataToSave;
+            }
 
             // Sincroniza com Firestore em segundo plano
             if (firestoreOnline && firestoreDB) {
@@ -3434,7 +3450,18 @@
                 console.log('🔄 Carregando dados iniciais...');
                 
                 const cartItems = await dbGetAll(STORES.CART);
-                cart = cartItems;
+                // Auto-limpeza: remove itens corrompidos/antigos (sem id, preço ou quantidade válidos)
+                // e corrige a quantidade caso esteja undefined/NaN — resolve o "NaN" no ícone do carrinho.
+                cart = (cartItems || [])
+                    .filter(item => item && item.id !== undefined && item.id !== null && !isNaN(Number(item.price)))
+                    .map(item => ({
+                        ...item,
+                        price: Number(item.price) || 0,
+                        quantity: Math.max(1, parseInt(item.quantity, 10) || 1)
+                    }));
+                if (cart.length !== (cartItems || []).length) {
+                    lsSave(STORES.CART, cart); // persiste a limpeza para não repetir a cada load
+                }
                 updateCartUI();
                 console.log('🛒 Carrinho carregado:', cart.length, 'itens');
                 
@@ -4113,7 +4140,7 @@
         }
 
         function updateCartUI() {
-            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+            const totalItems = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
             const cartCount = document.getElementById('cartCount');
             if (cartCount) {
                 cartCount.textContent = totalItems;
@@ -4317,7 +4344,7 @@
             try {
                 const settings = await dbGet(STORES.SETTINGS, 'app_settings') || {};
                 
-                const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                const subtotal = cart.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0);
                 const delivery = settings.deliveryPrice || 0;
                 const total = subtotal + delivery;
                 
