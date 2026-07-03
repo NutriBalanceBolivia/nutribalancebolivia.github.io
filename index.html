@@ -1,14 +1,17 @@
 <!--
   ============================================================================
-  FIREBASE SECURITY RULES — EJEMPLO (NO APLICADO AUTOMÁTICAMENTE)
+  FIREBASE SECURITY RULES — EJEMPLO
   ============================================================================
-  Este archivo NO habilita reglas de seguridad. Mientras el proyecto de
-  Firebase esté en "modo de prueba" (o sin reglas), CUALQUIER PERSONA que
-  conozca la URL del proyecto puede leer y escribir en Firestore/Storage.
-  Antes de anunciar este sitio públicamente, pega las reglas de abajo en:
+  El login del panel admin usa Firebase Authentication real (Email/Password) —
+  ya no es una contraseña fija en el JS del cliente. Por eso las reglas de
+  abajo (allow write: if request.auth != null) funcionan correctamente:
+  solo quien inicia sesión con el usuario admin creado en Firebase Auth
+  consigue escribir en Firestore/Storage.
+
+  Aplica (o confirma que ya están aplicadas) en:
   Firebase Console > Firestore Database > Reglas   (y > Storage > Reglas)
 
-  --- Firestore (ejemplo mínimo: lectura pública, escritura solo autenticada) ---
+  --- Firestore ---
   rules_version = '2';
   service cloud.firestore {
     match /databases/{database}/documents {
@@ -29,13 +32,6 @@
       }
     }
   }
-
-  IMPORTANTE: el panel admin de este archivo usa una contraseña fija en el
-  JS del cliente (visible en el código fuente) solo para ocultar el panel
-  visualmente — NO es autenticación real. Para que "request.auth != null"
-  funcione de verdad, hay que migrar el login admin a Firebase Authentication
-  (Email/Password o Anónimo + Custom Claims) antes de aplicar las reglas de
-  arriba tal cual, o la escritura del admin dejará de funcionar.
   ============================================================================
 -->
 <!DOCTYPE html>
@@ -100,6 +96,7 @@
          `defer` preserva el orden de ejecución y no bloquea el parseo del
          HTML; `async` no garantiza orden y podría romper la inicialización. -->
     <script defer src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
@@ -1936,10 +1933,9 @@
 <body>
     <a class="skip-link" href="#mainContent">Saltar al contenido principal</a>
 
-    <!-- ===== BANNER DEMO ADMIN (aviso de seguridad) ===== -->
+    <!-- ===== BANNER ADMIN (info de arquitetura) ===== -->
     <div id="adminDemoBanner" class="admin-demo-banner" role="alert" style="display:none;">
-        ⚠️ Panel de administración en modo DEMO: escribe directamente en Firestore/Storage sin backend intermedio.
-        Úsalo solo en un entorno controlado y aplica las Firebase Security Rules antes de producción real.
+        ℹ️ Panel de administración: escribe directamente en Firestore/Storage (sin backend intermedio). Acceso protegido por Firebase Authentication.
     </div>
 
     <!-- ===== STATUS DO BANCO DE DADOS ===== -->
@@ -3900,39 +3896,7 @@
             }
         }
 
-        async function loginAdmin() {
-            const user = document.getElementById('adminUser').value.trim();
-            const password = document.getElementById('adminPassword').value.trim();
-            
-            const adminCredentials = {
-                user: 'gladz',
-                password: 'gladz123'
-            };
-            
-            if (user === adminCredentials.user && password === adminCredentials.password) {
-                const adminUser = {
-                    id: 'admin',
-                    type: 'admin',
-                    name: 'Administrador',
-                    email: 'admin@nutribalance.com',
-                    created: new Date().toISOString()
-                };
-
-                // Login imediato — salva local sem depender do Firebase
-                localStorage.setItem('currentUserId', 'admin');
-                localStorage.setItem('nutribalance_user', JSON.stringify(adminUser));
-                currentUser = adminUser;
-                updateUserInterface();
-                closeLoginModal();
-                showNotification(currentLanguage === 'es' ? '✅ ¡Bienvenido, Administrador!' : '✅ Bem-vindo, Administrador!');
-
-                // Sincroniza com Firebase em segundo plano (sem bloquear)
-                dbPut(STORES.USERS, adminUser).catch(() => {});
-            } else {
-                document.getElementById('adminError').textContent = currentLanguage === 'es' ? 'Usuario o contraseña incorrectos' : 'Usuário ou senha incorretos';
-                document.getElementById('adminError').style.display = 'block';
-            }
-        }
+        // (função loginAdmin antiga removida — o login de admin agora acontece via loginUnified() + Firebase Authentication)
 
         // ===== LOGIN UNIFICADO =====
         async function loginUnified() {
@@ -3948,21 +3912,30 @@
                 return;
             }
 
-            // Verificar se é admin
-            const adminCredentials = { user: 'gladz', password: 'gladz123' };
-            if (identifier === adminCredentials.user && password === adminCredentials.password) {
-                const adminUser = {
-                    id: 'admin', type: 'admin', name: 'Administrador',
-                    email: 'admin@nutribalance.com', created: new Date().toISOString()
-                };
-                localStorage.setItem('currentUserId', 'admin');
-                localStorage.setItem('nutribalance_user', JSON.stringify(adminUser));
-                currentUser = adminUser;
-                updateUserInterface();
-                closeLoginModal();
-                showNotification(currentLanguage === 'es' ? '✅ ¡Bienvenido, Administrador!' : '✅ Bem-vindo, Administrador!');
-                dbPut(STORES.USERS, adminUser).catch(() => {});
-                return;
+            // Verificar se é admin (Firebase Authentication real — a senha não fica mais no código)
+            if (firebaseReadyPromise) await firebaseReadyPromise;
+            if (typeof firebase !== 'undefined' && firebase.auth) {
+                try {
+                    const cred = await firebase.auth().signInWithEmailAndPassword(identifier, password);
+                    if (cred && cred.user) {
+                        const adminUser = {
+                            id: 'admin', type: 'admin', name: 'Administrador',
+                            email: cred.user.email, created: new Date().toISOString()
+                        };
+                        localStorage.setItem('currentUserId', 'admin');
+                        localStorage.setItem('nutribalance_user', JSON.stringify(adminUser));
+                        currentUser = adminUser;
+                        updateUserInterface();
+                        closeLoginModal();
+                        showNotification(currentLanguage === 'es' ? '✅ ¡Bienvenido, Administrador!' : '✅ Bem-vindo, Administrador!');
+                        dbPut(STORES.USERS, adminUser).catch(() => {});
+                        return;
+                    }
+                } catch (authError) {
+                    // auth/user-not-found ou auth/wrong-password: não é o admin, tenta como cliente abaixo
+                    // outros erros (rede, etc.) também caem no fluxo de cliente, que vai falhar com sua própria mensagem
+                    console.warn('Login admin (Firebase Auth) não bateu, tentando como cliente:', authError.code || authError.message);
+                }
             }
 
             // Tentar login como cliente (por email)
@@ -4019,10 +3992,15 @@
         }
 
         async function logout() {
+            const wasAdmin = currentUser && currentUser.type === 'admin';
             currentUser = null;
             
             localStorage.removeItem('currentUserId');
             localStorage.removeItem('nutribalance_user');
+
+            if (wasAdmin && typeof firebase !== 'undefined' && firebase.auth) {
+                try { await firebase.auth().signOut(); } catch (e) { /* ignora */ }
+            }
             
             updateUserInterface();
             closeLogoutModal();
